@@ -1,0 +1,54 @@
+# ============================================================
+# 通用默认检查规则
+# 仅检查基础格式设置，适用于没有特定学校模板的用户
+# ============================================================
+
+meta:
+  name: "通用默认检查"
+  version: "1.0"
+  description: "仅检查基础格式设置（页面设置、基本字体、基本段落格式）"
+
+# ============================
+# 一、页面设置（A4 + Word 默认页边距）
+# ============================
+page_setup:
+  paper_size: "A4"
+  width_cm: 21.0
+  height_cm: 29.7
+  margin_top_cm: 2.54      # Word 默认上边距 (1 inch)
+  margin_bottom_cm: 2.54    # Word 默认下边距 (1 inch)
+  margin_left_cm: 3.18      # Word 默认左边距 (1.25 inch)
+  margin_right_cm: 3.18     # Word 默认右边距 (1.25 inch)
+
+# ============================
+# 二、基本样式定义
+# ============================
+styles:
+  Normal:
+    paragraph:
+      line_spacing: 360           # 1.5 倍行距 (240 * 1.5)
+      line_spacing_rule: "auto"
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "宋体"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 12            # 小四号
+
+# ============================
+# 三、特殊检查（通用规则下关闭高级检查）
+# ============================
+special_checks:
+  template_instructions_check:
+    enabled: false
+  body_font_consistency:
+    enabled: false
+  heading_font_consistency:
+    enabled: false
+  figure_table_caption:
+    enabled: false
+
+# ============================
+# 四、标题样式修复（通用规则下关闭）
+# ============================
+heading_style_fix:
+  enabled: false

@@ -41,3 +41,12 @@ backend/.env
 
 # 临时文件
 *.local
+
+# SSL 证书（服务器管理）
+ssl/
+
+# CodeBuddy / Specify 工具目录
+.codebuddy/
+.codebuddyignore
+CODEBUDDY.md
+.specify/

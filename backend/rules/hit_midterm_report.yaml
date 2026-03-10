@@ -1,0 +1,529 @@
+# ============================================================
+# 哈尔滨工业大学(深圳) 毕业论文中期报告 格式规则配置
+# 从模板文件 "毕业论文中期报告-模版参考.docx" 提取
+# ============================================================
+
+meta:
+  name: "哈工大(深圳)毕业论文中期报告"
+  version: "1.0"
+  description: "基于模板文件提取的格式检查规则"
+
+# ============================
+# 一、页面设置
+# ============================
+page_setup:
+  paper_size: "A4"          # A4纸张
+  width_cm: 21.0
+  height_cm: 29.7
+  margin_top_cm: 2.85
+  margin_bottom_cm: 2.85
+  margin_left_cm: 3.0
+  margin_right_cm: 3.0
+  header_distance_cm: 3.0   # 页眉距顶端
+  footer_distance_cm: 2.3   # 页脚距底端
+  gutter_cm: 0              # 装订线
+  doc_grid:
+    type: "linesAndChars"
+    line_pitch: 412
+    char_space: 3481
+
+# ============================
+# 二、页眉页脚
+# ============================
+header_footer:
+  header:
+    text: "哈尔滨工业大学深圳校区毕业论文中期报告"
+    style: "Header"
+    alignment: "center"
+    font_size_pt: 9.0
+  footer:
+    # 页脚包含页码，自动编号
+    style: "Footer"
+    alignment: "left"
+    font_size_pt: 9.0
+
+# ============================
+# 三、样式定义规则
+# 每个样式包含：段落格式 + 字符格式
+# ============================
+styles:
+  # ----- 封面标题 -----
+  cover_title:
+    description: "封面标题（哈尔滨工业大学深圳校区、毕业论文中期报告）"
+    check_type: "content_match"  # 通过内容匹配识别
+    content_patterns:
+      - "哈尔滨工业大学"
+      - "毕业论文中期报告"
+    paragraph:
+      alignment: "center"
+      line_spacing: 1.2
+      line_spacing_rule: "multiple"
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "华文新魏"
+      font_size_pt: 36.0
+      bold: true
+
+  # ----- 目录标题 -----
+  目录标题:
+    description: "目录页的'目  录'标题"
+    paragraph:
+      alignment: "center"
+      spacing_before_lines: 100    # 段前1行 (100 = 1行, 50 = 0.5行)
+      spacing_after_lines: 80     # 段后0.8行
+      line_spacing: 300           # 1.25倍行距 (Word内部值300 lineRule=auto)
+      line_spacing_rule: "auto"
+      keep_next: true             # 与下段同页
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "黑体"
+      font_hAnsi: "Times New Roman"
+      font_cs: "黑体"
+      font_size_pt: 18.0         # 小二号 = 18磅
+      font_size_cs_pt: 18.0
+
+  # ----- 标题1 (Heading 1) -----
+  # 章标题：如"课题主要研究内容及进度"
+  Heading 1:
+    description: "一级章标题 (如: 1 课题主要研究内容及进度)"
+    paragraph:
+      alignment: "center"
+      spacing_before_lines: 100
+      spacing_after_lines: 80
+      line_spacing: 300
+      line_spacing_rule: "auto"
+      outline_level: 0            # 大纲级别1
+      keep_next: true             # 与下段同页
+      keep_lines: true            # 段中不分页
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "黑体"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 18.0         # 小二号 = 18磅
+      font_size_cs_pt: 18.0
+      kern: 44                   # 半磅值（Word XML w:val），22pt
+      char_spacing: -4           # 字符间距紧缩 (w:spacing val="-4")
+
+  # ----- 一级节标题2.3 -----
+  # 二级标题：如"1.1课题主要研究内容"
+  # 注：该样式本身无 outlineLvl 定义，大纲级别通过 numPr ilvl=1 实现
+  一级节标题2.3:
+    description: "二级节标题 (如: 1.1 课题主要研究内容)"
+    paragraph:
+      spacing_before_lines: 50    # 段前0.5行
+      spacing_after_lines: 50     # 段后0.5行
+      line_spacing: 300
+      line_spacing_rule: "auto"
+      outline_level: 1            # 大纲级别2（通过编号 ilvl 隐式实现）
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "黑体"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 15.0         # 小三号 = 15磅
+
+  # ----- 二级节标题2.3.1 -----
+  # 三级标题：如"1.2.1 气体润滑轴承的发展"
+  二级节标题2.3.1:
+    description: "三级节标题 (如: 1.2.1 xxx)"
+    paragraph:
+      spacing_before_lines: 50
+      spacing_after_lines: 50
+      line_spacing: 300
+      line_spacing_rule: "auto"
+      outline_level: 2            # 大纲级别3
+      keep_next: true             # 与下段同页
+      keep_lines: true            # 段中不分页
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "黑体"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 14.0         # 四号 = 14磅
+      font_size_cs_pt: 14.0
+      kern: 0
+
+  # ----- 论文正文-首行缩进 -----
+  # 基于 Normal，增加首行缩进和1.25倍行距
+  论文正文-首行缩进:
+    description: "正文段落（首行缩进2字符）"
+    paragraph:
+      line_spacing: 300
+      line_spacing_rule: "auto"
+      first_line_indent_chars: 200  # 首行缩进2字符 (200 = 2字符)
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "宋体"        # 继承自 Normal
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 12.0           # 继承自 Normal 小四号 = 12磅
+
+  # ----- Normal (基础正文) -----
+  Normal:
+    description: "基础正文样式"
+    paragraph:
+      alignment: "both"           # 两端对齐
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "宋体"
+      font_hAnsi: "Times New Roman"
+      font_cs: "Times New Roman"
+      font_size_pt: 12.0         # 小四号 = 12磅
+      font_size_cs_pt: 12.0
+      kern: 2
+
+  # ----- 图题 -----
+  图题:
+    description: "图标题 (如: 图1-1 xxx), 使用编号 ilvl=3 自动编号"
+    paragraph:
+      alignment: "center"
+      spacing_after_lines: 50
+      line_spacing: 240           # 单倍行距
+      line_spacing_rule: "auto"
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 10.5         # 五号 = 10.5磅
+      font_size_cs_pt: 10.5
+
+  # ----- 子图题 -----
+  子图题:
+    description: "子图标题 (如: (a) xxx)"
+    paragraph:
+      alignment: "center"
+      spacing_after_lines: 50
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 10.5
+      font_size_cs_pt: 10.5
+
+  # ----- 续图题 -----
+  续图题:
+    description: "续图标题 (如: 图1-1（续）)"
+    paragraph:
+      alignment: "center"
+      spacing_after_lines: 50
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 10.5
+      font_size_cs_pt: 10.5
+
+  # ----- 表题注 -----
+  表题注:
+    description: "表标题 (如: 表2-1 xxx), 使用编号 ilvl=4 自动编号"
+    paragraph:
+      alignment: "center"
+      spacing_before_lines: 50
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 10.5         # 五号
+      font_size_cs_pt: 10.5
+
+  # ----- 续表题注 -----
+  续表题注:
+    description: "续表标题 (如: 表2-2（续表）), numId=0 禁用自动编号需手动编写"
+    paragraph:
+      alignment: "right"
+      spacing_before_lines: 50
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 10.5
+      font_size_cs_pt: 10.5
+
+  # ----- 表正文 -----
+  表正文:
+    description: "表格内容文字"
+    paragraph:
+      alignment: "center"
+      spacing_before_lines: 25
+      spacing_after_lines: 25
+      line_spacing: 240
+      line_spacing_rule: "auto"
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 10.5
+      font_size_cs_pt: 10.5
+
+  # ----- 公式题注 -----
+  公式题注:
+    description: "公式编号 (右对齐)"
+    paragraph:
+      alignment: "right"
+      line_spacing: 300
+      line_spacing_rule: "auto"
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+
+  # ----- 参考文献 -----
+  参考文献:
+    description: "参考文献条目"
+    paragraph:
+      line_spacing: 300
+      line_spacing_rule: "auto"
+      indent_left_twips: 567      # 左缩进
+      indent_hanging_twips: 567   # 悬挂缩进
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+
+  # ----- 非章节标题-摘要结论参考文献 -----
+  非章节标题-摘要结论参考文献:
+    description: "非章节标题（摘要、结论、参考文献等标题，不参与章节编号）"
+    paragraph:
+      alignment: "center"
+      spacing_before_lines: 100
+      spacing_after_lines: 80
+      line_spacing: 300
+      line_spacing_rule: "auto"
+      outline_level: 0            # 大纲级别1（但 numId=0，不参与编号）
+      keep_next: true
+      keep_lines: true
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+      font_size_cs_pt: 18.0
+      kern: 44                   # 半磅值（Word XML w:val），22pt
+      char_spacing: -4           # 字符间距紧缩 (w:spacing val="-4")
+      bold: false                 # 显式设为非粗体
+
+  # ----- 关键词 -----
+  关键词:
+    description: "关键词段落样式"
+    paragraph:
+      line_spacing: 300
+      line_spacing_rule: "auto"
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "黑体"
+      font_hAnsi: "Times New Roman"
+
+  # ----- 条标题 -----
+  # 条标题 仅有 Char 样式，用于四级标题
+  # 条标题 Char:
+  #   font: 黑体 14pt, Times New Roman
+
+  # ----- 英文正文 -----
+  英文正文:
+    description: "英文正文段落"
+    paragraph:
+      line_spacing: 300
+      line_spacing_rule: "auto"
+      first_line_indent_chars: 0  # firstLineChars=0（但 firstLine=198）
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "宋体"
+      font_hAnsi: "Times New Roman"
+
+  # ----- toc 1 (目录一级条目) -----
+  toc 1:
+    description: "目录中的一级条目（章标题）"
+    paragraph:
+      alignment: "left"
+      line_spacing: 300
+      line_spacing_rule: "auto"
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "黑体"
+      font_hAnsi: "Times New Roman"
+      bold: true
+
+  # ----- toc 2 (目录二级条目) -----
+  toc 2:
+    description: "目录中的二级条目（节标题）"
+    paragraph:
+      alignment: "left"
+      indent_left_twips: 240      # 左缩进
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "宋体"
+      font_hAnsi: "Times New Roman"
+      font_size_cs_pt: 10.0
+
+  # ----- toc 3 (目录三级条目) -----
+  toc 3:
+    description: "目录中的三级条目（小节标题）"
+    paragraph:
+      alignment: "left"
+      line_spacing: 288
+      line_spacing_rule: "auto"
+      indent_left_twips: 480      # 左缩进
+    character:
+      font_ascii: "Times New Roman"
+      font_hAnsi: "Times New Roman"
+
+  # ----- 页眉 -----
+  Header:
+    description: "页眉样式"
+    paragraph:
+      alignment: "center"
+    character:
+      font_size_pt: 9.0
+      font_size_cs_pt: 9.0
+      kern: 2
+
+  # ----- 页脚 -----
+  Footer:
+    description: "页脚样式"
+    paragraph:
+      alignment: "left"
+    character:
+      font_size_pt: 9.0
+      font_size_cs_pt: 9.0
+
+  # ----- 说明文字 (模板中的红色说明，检查时应报告) -----
+  说明文字:
+    description: "模板说明文字（红色），应在提交前删除"
+    should_not_exist: true
+    paragraph:
+      line_spacing: 300
+      line_spacing_rule: "auto"
+    character:
+      color: "FF0000"
+
+# ============================
+# 四、文档结构规则
+# ============================
+structure:
+  # 必须存在的章节（一级标题）
+  required_chapters:
+    - pattern: "课题主要研究内容及进度"
+      style: "Heading 1"
+    - pattern: "已完成的研究工作及结果"
+      style: "Heading 1"
+    - pattern: "后期拟完成的研究工作及进度安排"
+      style: "Heading 1"
+    - pattern: "存在的困难及解决方案"
+      style: "Heading 1"
+    - pattern: "论文按时完成的可能性"
+      style: "Heading 1"
+
+  # 标题层级对应关系
+  heading_style_mapping:
+    level_1: "Heading 1"              # 章标题
+    level_2: "一级节标题2.3"           # 节标题
+    level_3: "二级节标题2.3.1"         # 小节标题
+
+  # 目录设置
+  toc:
+    toc_title_style: "目录标题"
+    outline_range: "1-3"             # TOC \o "1-3"
+    custom_styles:                   # TOC \t 自定义样式映射
+      一级节标题2.3: 2
+      二级节标题2.3.1: 3
+
+# ============================
+# 五、编号定义规则
+# ============================
+numbering:
+  # 标题编号（abstractNumId=1 in template, multilevel）
+  heading_numbering:
+    description: "标题使用多级编号，章节标题和图表题注共享同一编号链"
+    type: "multilevel"
+    levels:
+      0:
+        numFmt: "decimal"
+        lvlText: "%1"             # 章编号: 1, 2, 3...
+        pStyle: "Heading 1"       # 绑定到 Heading 1 (styleId=00000d)
+        suff: "tab"               # 编号后用 tab 分隔
+        tab_pos: 420              # tab stop 位置 420 twips (≈0.74cm)
+        ind_left: 0
+        ind_firstLine: 0
+      1:
+        numFmt: "decimal"
+        lvlText: "%1.%2"          # 节编号: 1.1, 1.2...
+        pStyle: "一级节标题2.3"    # 绑定到 一级节标题2.3 (styleId=00000e)
+        suff: "space"             # 编号后用空格分隔（间距紧凑）
+        ind_left: 0
+        ind_firstLine: 0
+      2:
+        numFmt: "decimal"
+        lvlText: "%1.%2.%3"       # 小节编号: 1.2.1, 1.2.2...
+        pStyle: "二级节标题2.3.1"  # 绑定到 二级节标题2.3.1 (styleId=00000f)
+        suff: "space"             # 编号后用空格分隔（间距紧凑）
+        ind_left: 0
+        ind_firstLine: 0
+      3:
+        numFmt: "decimal"
+        lvlText: "图%1-%4"        # 图编号: 图1-1, 图2-1...
+        suff: "space"
+      4:
+        numFmt: "decimal"
+        lvlText: "表%1-%5"        # 表编号: 表1-1, 表2-1...
+        suff: "space"
+
+  # 参考文献编号（abstractNumId=0 in template, singleLevel）
+  reference_numbering:
+    description: "参考文献使用方括号编号 [1], [2]..."
+    type: "singleLevel"
+    levels:
+      0:
+        numFmt: "decimal"
+        lvlText: "[%1]"
+        pStyle: "参考文献"
+
+# ============================
+# 六、特殊检查规则
+# ============================
+special_checks:
+  # 检查是否存在说明文字（红色模板说明）未删除
+  template_instructions_check:
+    enabled: true
+    description: "检查是否存在未删除的模板说明文字"
+    style_name: "说明文字"
+    color: "FF0000"
+
+  # 正文段落字体一致性检查
+  body_font_consistency:
+    enabled: true
+    description: "检查正文中文使用宋体、英文使用Times New Roman"
+    target_styles:
+      - "论文正文-首行缩进"
+      - "Normal"
+    expected_chinese_font: "宋体"
+    expected_english_font: "Times New Roman"
+
+  # 标题字体一致性检查
+  heading_font_consistency:
+    enabled: true
+    description: "检查标题中文使用黑体、英文使用Times New Roman"
+    target_styles:
+      - "Heading 1"
+      - "一级节标题2.3"
+      - "二级节标题2.3.1"
+    expected_chinese_font: "黑体"
+    expected_english_font: "Times New Roman"
+
+  # 图表标题存在性检查
+  figure_table_caption:
+    enabled: true
+    description: "检查图片是否有对应的图题"
+    figure_caption_style: "图题"
+    table_caption_style: "表题注"
+
+# ============================
+# 七、标题样式自动修复规则
+# ============================
+# 当标题段落使用了错误的样式（如 Heading 2 而非 一级节标题2.3），
+# 且标题文本中包含手动输入的编号（如 "1.1 xxx"），
+# 需要：1) 替换为正确的样式  2) 去除手动编号前缀
+heading_style_fix:
+  enabled: true
+  description: "修复使用错误样式的标题段落，替换为正确样式并去除手动编号"
+  # 样式替换映射：错误样式 → 正确样式
+  style_replacement:
+    "Heading 2": "一级节标题2.3"
+    "Heading 3": "二级节标题2.3.1"
+  # 说明文字样式误用修复：将非红色的"说明文字"段落改为正文样式
+  caption_style_fix:
+    source: "说明文字"
+    target: "论文正文-首行缩进"
+  # 手动编号模式（正则表达式）：匹配并去除标题文本中的手动编号前缀
+  # 每个 pattern 对应一个标题级别的编号格式
+  manual_numbering_patterns:
+    # 二级标题编号：如 "1.1 xxx" 或 "1.1xxx"
+    "一级节标题2.3": "^\\d+\\.\\d+\\s*"
+    # 三级标题编号：如 "1.2.1 xxx" 或 "1.2.1xxx"
+    "二级节标题2.3.1": "^\\d+\\.\\d+\\.\\d+\\s*"

@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+*.md
+specs
+.codebuddy
+__pycache__
+*.pyc
+.env.local
+.vscode
+.idea
+frontend/src/__tests__

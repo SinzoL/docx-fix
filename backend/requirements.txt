@@ -1,0 +1,18 @@
+# Web 框架
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+
+# 文档处理（已有，确保版本）
+python-docx>=0.8.11
+lxml>=4.9.0
+pyyaml>=6.0
+
+# LLM 集成
+openai>=1.0.0
+python-dotenv>=1.0.0
+
+# 测试依赖
+pytest>=7.0
+httpx>=0.25.0
+pytest-asyncio>=0.23.0
