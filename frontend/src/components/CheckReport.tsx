@@ -443,21 +443,38 @@ export default function CheckReportView({
 
         {/* 规则切换 */}
         {totalRules > 1 && !readOnly && (
-          <div className="mb-6 flex items-center gap-3 p-3 bg-slate-50/50 rounded-xl border border-slate-100">
-            <span className="text-sm font-medium text-slate-600 shrink-0">切换检查标准：</span>
+          <div className="mb-6 flex items-center gap-3 p-3 px-4 bg-gradient-to-r from-slate-50/80 to-white/60 rounded-xl border border-slate-200/60 rule-select-wrapper">
+            <span className="text-sm font-medium text-slate-500 shrink-0 flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+              切换标准
+            </span>
             <Select
               value={selectedRuleId}
               onChange={(val) => handleRuleSwitch(val as string)}
               loading={recheckLoading}
-              style={{ width: "300px" }}
+              style={{ width: "280px" }}
               size="small"
-              className="!border-white shadow-sm"
+              popupProps={{
+                overlayClassName: "rule-select-popup",
+                overlayInnerStyle: {
+                  padding: "6px",
+                  borderRadius: "12px",
+                  boxShadow: "0 16px 32px -6px rgba(0, 0, 0, 0.1), 0 6px 12px -4px rgba(0, 0, 0, 0.06)",
+                  border: "1px solid rgba(226, 232, 240, 0.8)",
+                  background: "rgba(255, 255, 255, 0.96)",
+                }
+              }}
             >
               {rules.length > 0 && (
                 <Select.OptionGroup label="预置标准" divider={customRules.length > 0}>
                   {rules.map((rule) => (
-                    <Select.Option key={rule.id} value={rule.id} label={rule.name}>
-                      {rule.name}
+                    <Select.Option key={rule.id} value={rule.id} label={rule.name} className="rule-select-option">
+                      <div className="flex items-center gap-2 py-0.5">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-md bg-blue-50 border border-blue-200/50 flex items-center justify-center">
+                          <svg className="w-3 h-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </span>
+                        <span className="font-medium text-slate-700 text-sm">{rule.name}</span>
+                      </div>
                     </Select.Option>
                   ))}
                 </Select.OptionGroup>
@@ -465,13 +482,24 @@ export default function CheckReportView({
               {customRules.length > 0 && (
                 <Select.OptionGroup label="我的规则">
                   {customRules.map((rule) => (
-                    <Select.Option key={`custom:${rule.id}`} value={`custom:${rule.id}`} label={rule.name}>
-                      <div className="flex items-center gap-2">
-                        <span>{rule.name}</span>
-                        <span className={`px-1.5 py-0.5 text-xs rounded-full border ${
+                    <Select.Option key={`custom:${rule.id}`} value={`custom:${rule.id}`} label={rule.name} className="rule-select-option">
+                      <div className="flex items-center gap-2 py-0.5">
+                        <span className={`flex-shrink-0 w-5 h-5 rounded-md border flex items-center justify-center ${
                           rule.source === 'template-extract'
-                            ? 'bg-violet-100 text-violet-700 border-violet-200'
-                            : 'bg-amber-100 text-amber-700 border-amber-200'
+                            ? 'bg-violet-50 border-violet-200/50'
+                            : 'bg-amber-50 border-amber-200/50'
+                        }`}>
+                          {rule.source === 'template-extract' ? (
+                            <svg className="w-3 h-3 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                          ) : (
+                            <svg className="w-3 h-3 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+                          )}
+                        </span>
+                        <span className="font-medium text-slate-700 text-sm">{rule.name}</span>
+                        <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${
+                          rule.source === 'template-extract'
+                            ? 'bg-violet-50 text-violet-600 border-violet-200/60'
+                            : 'bg-amber-50 text-amber-600 border-amber-200/60'
                         }`}>
                           {rule.source === 'template-extract' ? '模板提取' : 'AI 生成'}
                         </span>
@@ -482,8 +510,8 @@ export default function CheckReportView({
               )}
             </Select>
             {recheckLoading && (
-              <span className="text-xs font-semibold text-blue-500 flex items-center gap-1">
-                <span className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
+              <span className="text-xs font-semibold text-blue-500 flex items-center gap-1.5 animate-pulse">
+                <span className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
                 重新检查中...
               </span>
             )}

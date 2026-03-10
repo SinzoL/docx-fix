@@ -16,11 +16,12 @@ import ExtractPanel from "./components/ExtractPanel";
 import CheckReportView from "./components/CheckReport";
 import FixPreview from "./components/FixPreview";
 import HistoryList from "./components/HistoryList";
+import PolishPanel from "./components/PolishPanel";
 import { SvgIcon } from "./components/icons/SvgIcon";
 
 function App() {
   const [appState, setAppState] = useState<AppState>("IDLE");
-  const [activeTab, setActiveTab] = useState<"check" | "extract">("check");
+  const [activeTab, setActiveTab] = useState<"check" | "extract" | "polish">("check");
   const [sessionId, setSessionId] = useState<string>("");
   const [selectedRuleId, setSelectedRuleId] = useState<string>("default");
   const [checkReport, setCheckReport] = useState<CheckReport | null>(null);
@@ -219,6 +220,16 @@ function App() {
                 >
                   <SvgIcon name="scan-extract" size={16} /> 提取规则
                 </button>
+                <button
+                  onClick={() => setActiveTab("polish")}
+                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                    activeTab === "polish"
+                      ? "bg-white text-violet-600 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <SvgIcon name="sparkles" size={16} /> 内容润色
+                </button>
               </div>
             </div>
 
@@ -243,6 +254,10 @@ function App() {
 
             {activeTab === "extract" && (
               <ExtractPanel />
+            )}
+
+            {activeTab === "polish" && (
+              <PolishPanel />
             )}
           </div>
         )}

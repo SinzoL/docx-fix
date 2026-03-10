@@ -286,3 +286,62 @@ class ExtractRulesResponse(BaseModel):
     yaml_content: str  # 格式化的 YAML 规则字符串（前端可直接展示/编辑/保存到 localStorage）
     summary: ExtractRulesSummary  # 提取结果摘要
     filename: str  # 源模板文件名
+
+
+# ========================================
+# 润色相关
+# ========================================
+
+class ChangeDetailSchema(BaseModel):
+    """单个修改点的详情"""
+    type: str  # "grammar" | "wording" | "punctuation" | "structure" | "academic"
+    original: str
+    revised: str
+    explanation: str
+
+
+class PolishSuggestionSchema(BaseModel):
+    """单条润色建议"""
+    paragraph_index: int
+    original_text: str
+    polished_text: str
+    change_type: str  # "grammar" | "wording" | "punctuation" | "structure" | "academic"
+    changes: list[ChangeDetailSchema]
+    explanation: str
+    confidence: float
+    semantic_warning: bool = False
+    semantic_warning_text: Optional[str] = None
+
+
+class PolishSummarySchema(BaseModel):
+    """润色统计信息"""
+    total_paragraphs: int
+    polishable_paragraphs: int
+    skipped_paragraphs: int
+    modified_paragraphs: int
+    total_suggestions: int
+    by_type: dict[str, int]
+    semantic_warnings: int
+
+
+class PolishReportSchema(BaseModel):
+    """完整润色报告"""
+    session_id: str
+    filename: str
+    suggestions: list[PolishSuggestionSchema]
+    summary: PolishSummarySchema
+    polished_at: str
+
+
+class PolishApplyRequestSchema(BaseModel):
+    """应用润色修改请求"""
+    session_id: str
+    accepted_indices: list[int]
+
+
+class PolishApplyResponseSchema(BaseModel):
+    """应用润色修改响应"""
+    session_id: str
+    filename: str
+    applied_count: int
+    download_url: str

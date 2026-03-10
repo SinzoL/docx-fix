@@ -314,3 +314,159 @@ def build_review_conventions_messages(
         {"role": "system", "content": REVIEW_CONVENTIONS_SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+# ============================================================
+# 5. 内容润色 — Polisher Agent
+# ============================================================
+
+POLISH_SYSTEM_PROMPT = """你是一个专业的中文学术论文润色助手。你的任务是优化文本的表达质量，同时**绝对不能改变原文的语义和信息**。
+
+## 你的能力范围
+1. 语病修正（grammar）：语法错误、搭配不当、成分残缺、语序不当
+2. 用词优化（wording）：口语化→学术化、重复用词替换、措辞精确化
+3. 标点规范（punctuation）：中英文标点统一、全角半角规范
+4. 句式优化（structure）：过长句子拆分、补充逻辑连接词
+5. 学术规范（academic）：术语统一、数字表达规范
+
+## 严格约束
+- ❌ 不得改变原文的论点、论据和结论
+- ❌ 不得增加或删除实质性信息
+- ❌ 不得改变专有名词、人名、机构名
+- ❌ 不得改变数据、公式、引用编号
+- ❌ 不得改变英文术语和缩写（如 TensorFlow、ResNet、GPU 等）
+- ❌ 如果原文表达已经合适，返回原文不做修改（modified=false）
+
+## 输出格式
+必须输出合法的 JSON，格式如下：
+```json
+{
+  "paragraphs": [
+    {
+      "index": 0,
+      "polished": "润色后的文本",
+      "changes": [
+        {"type": "grammar|wording|punctuation|structure|academic", "original": "被修改的原始片段", "revised": "修改后的片段", "explanation": "修改理由"}
+      ],
+      "modified": true
+    }
+  ]
+}
+```
+
+注意：
+- index 对应输入中 [段落N] 的编号（从 0 开始）
+- 如果某段落无需修改，设置 modified=false，changes 为空数组，polished 为原文
+- changes 中的 type 必须是以下之一：grammar、wording、punctuation、structure、academic
+- 只输出 JSON，不要附加任何解释文字"""
+
+
+def build_polish_messages(
+    target_paragraphs: list[str],
+    context_before: list[str],
+    context_after: list[str],
+) -> list[dict]:
+    """构建润色请求的消息列表。
+
+    Args:
+        target_paragraphs: 待润色的段落文本列表
+        context_before: 前置上下文段落（仅供参考，不润色）
+        context_after: 后置上下文段落（仅供参考，不润色）
+
+    Returns:
+        OpenAI 格式的 messages 列表
+    """
+    # 构建用户消息
+    parts = []
+
+    if context_before:
+        parts.append("[上下文-前]（仅供理解语境，不需要润色）：")
+        for i, text in enumerate(context_before):
+            parts.append(f"  {text}")
+        parts.append("")
+
+    parts.append("[待润色段落]：")
+    for i, text in enumerate(target_paragraphs):
+        parts.append(f"  [段落{i}] {text}")
+    parts.append("")
+
+    if context_after:
+        parts.append("[上下文-后]（仅供理解语境，不需要润色）：")
+        for i, text in enumerate(context_after):
+            parts.append(f"  {text}")
+        parts.append("")
+
+    parts.append("请对以上 [待润色段落] 进行润色，以 JSON 格式输出结果。")
+
+    user_content = "\n".join(parts)
+
+    return [
+        {"role": "system", "content": POLISH_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
+# ============================================================
+# 6. 内容润色 — Reviewer Agent（语义一致性审核）
+# ============================================================
+
+REVIEWER_SYSTEM_PROMPT = """你是学术文本语义一致性审查员。你的任务是对比原文和润色后文本，判断润色是否改变了原文的语义。
+
+## 判断标准
+以下情况视为**语义改变**（semantic_preserved=false）：
+1. 论点、论据或结论被改变
+2. 具体数据被改为笼统描述（如 "O(n²)" → "较高"）
+3. 专有名词被替换为其他名称（如 "GPU" → "高性能计算"）
+4. 关键信息被删除或添加
+5. 因果关系、条件关系被改变
+
+以下情况视为**语义不变**（semantic_preserved=true）：
+1. 仅替换了主语代词（如 "我们" → "本文"）
+2. 修正了语法错误但含义不变
+3. 口语化表达改为学术化表达（同义替换）
+4. 标点符号的修正
+5. 句式调整但信息不变
+
+## 输出格式
+必须输出合法的 JSON 数组：
+```json
+[
+  {"index": 0, "semantic_preserved": true, "warning": null},
+  {"index": 1, "semantic_preserved": false, "warning": "将具体算法名称'ResNet-50'改为了笼统的'深度学习模型'，丢失了具体信息"}
+]
+```
+
+注意：
+- index 对应输入中段落对的编号
+- warning 仅在 semantic_preserved=false 时提供具体说明
+- 只输出 JSON，不要附加任何解释文字"""
+
+
+def build_reviewer_messages(
+    original_texts: list[str],
+    polished_texts: list[str],
+) -> list[dict]:
+    """构建语义审核请求的消息列表。
+
+    Args:
+        original_texts: 原始段落文本列表
+        polished_texts: 润色后段落文本列表
+
+    Returns:
+        OpenAI 格式的 messages 列表
+    """
+    parts = ["请审核以下段落的润色结果，判断语义是否被改变：\n"]
+
+    for i, (orig, polished) in enumerate(zip(original_texts, polished_texts)):
+        parts.append(f"[段落对{i}]")
+        parts.append(f"  原文: {orig}")
+        parts.append(f"  润色后: {polished}")
+        parts.append("")
+
+    parts.append("请以 JSON 格式输出审核结果。")
+    user_content = "\n".join(parts)
+
+    return [
+        {"role": "system", "content": REVIEWER_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]

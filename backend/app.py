@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from config import TEMP_DIR, SESSION_EXPIRE_SECONDS, SESSION_CLEANUP_INTERVAL, CORS_ORIGINS, setup_logging  # noqa: E402
 from api.routes import router  # noqa: E402
 from api.ai_routes import ai_router  # noqa: E402
+from api.polish_routes import polish_router  # noqa: E402
 
 # 初始化日志
 setup_logging()
@@ -88,3 +89,4 @@ app.add_middleware(
 # 挂载 API 路由
 app.include_router(router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(polish_router, prefix="/api")

@@ -160,7 +160,11 @@ export type AppState =
   | "REPORT_READY"
   | "FIXING"
   | "FIX_PREVIEW"
-  | "DOWNLOADED";
+  | "DOWNLOADED"
+  // 润色状态
+  | "POLISHING"
+  | "POLISH_PREVIEW"
+  | "POLISH_APPLYING";
 
 // ========================================
 // IndexedDB 缓存
@@ -253,4 +257,66 @@ export interface CustomRule {
   source_filename?: string;
   created_at: string;
   expires_at: string;
+}
+
+// ========================================
+// 润色相关
+// ========================================
+
+/** 润色修改类型 */
+export type PolishChangeType = "grammar" | "wording" | "punctuation" | "structure" | "academic";
+
+/** 单个修改点的详情 */
+export interface ChangeDetail {
+  type: PolishChangeType;
+  original: string;
+  revised: string;
+  explanation: string;
+}
+
+/** 单条润色建议 */
+export interface PolishSuggestion {
+  paragraph_index: number;
+  original_text: string;
+  polished_text: string;
+  change_type: PolishChangeType;
+  changes: ChangeDetail[];
+  explanation: string;
+  confidence: number;
+  semantic_warning: boolean;
+  semantic_warning_text: string | null;
+}
+
+/** 润色统计信息 */
+export interface PolishSummary {
+  total_paragraphs: number;
+  polishable_paragraphs: number;
+  skipped_paragraphs: number;
+  modified_paragraphs: number;
+  total_suggestions: number;
+  by_type: Record<string, number>;
+  semantic_warnings: number;
+}
+
+/** 完整润色报告 */
+export interface PolishReport {
+  session_id: string;
+  filename: string;
+  suggestions: PolishSuggestion[];
+  summary: PolishSummary;
+  polished_at: string;
+}
+
+/** 应用润色修改请求 */
+export interface PolishApplyRequest {
+  session_id: string;
+  accepted_indices: number[];
+}
+
+/** 应用润色修改响应 */
+export interface PolishApplyResponse {
+  session_id: string;
+  filename: string;
+  applied_count: number;
+  download_url: string;
 }

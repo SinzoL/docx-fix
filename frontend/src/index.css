@@ -39,7 +39,75 @@
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
 }
 
-/* 覆盖 TDesign Upload 拖拽区域的固定尺寸，使其自适应容器 */
+/* ======== 规则选择下拉框样式优化 ======== */
+
+/* 选择器输入框 - 提升圆角与边框质感 */
+.rule-select-wrapper .t-input {
+  border-radius: 12px !important;
+  border-color: rgba(226, 232, 240, 0.8) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.rule-select-wrapper .t-input:hover {
+  border-color: rgba(147, 197, 253, 0.8) !important;
+  box-shadow: 0 1px 6px rgba(59, 130, 246, 0.08) !important;
+}
+
+.rule-select-wrapper .t-input.t-is-focused,
+.rule-select-wrapper .t-input:focus-within {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 6px rgba(59, 130, 246, 0.08) !important;
+}
+
+/* 弹出层选项样式 */
+.rule-select-popup .t-select-option {
+  border-radius: 8px !important;
+  margin: 2px 0 !important;
+  padding: 6px 10px !important;
+  transition: all 0.15s ease !important;
+}
+
+.rule-select-popup .t-select-option:hover {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.8), rgba(238, 242, 255, 0.6)) !important;
+}
+
+.rule-select-popup .t-select-option.t-is-selected {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.8), rgba(224, 231, 255, 0.6)) !important;
+  font-weight: 600 !important;
+}
+
+.rule-select-popup .t-select-option.t-is-selected::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: #3b82f6;
+}
+
+/* 选项组标题 */
+.rule-select-popup .t-select-option-group__header {
+  padding: 8px 10px 4px !important;
+  margin-top: 4px !important;
+}
+
+.rule-select-popup .t-select-option-group:first-child .t-select-option-group__header {
+  margin-top: 0 !important;
+}
+
+/* 分割线 */
+.rule-select-popup .t-select-option-group + .t-select-option-group {
+  border-top: 1px solid rgba(226, 232, 240, 0.5);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+/* ======== 覆盖 TDesign Upload 拖拽区域的固定尺寸，使其自适应容器 ======== */
 .t-upload__dragger {
   width: 100% !important;
   height: auto !important;

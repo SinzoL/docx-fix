@@ -13,6 +13,7 @@ import type {
   ExtractResult,
   AiGenerateRulesResponse,
   DisputedItem,
+  PolishApplyResponse,
 } from "../types";
 
 const API_BASE = "/api";
@@ -273,4 +274,56 @@ export async function reviewConventions(
   });
 
   return handleResponse<AiReviewConventionsResponse>(response);
+}
+
+// ========================================
+// 润色相关 API
+// ========================================
+
+/**
+ * POST /api/polish/apply — 应用用户选中的润色建议
+ */
+export async function applyPolish(
+  sessionId: string,
+  acceptedIndices: number[]
+): Promise<PolishApplyResponse> {
+  const response = await fetch(`${API_BASE}/polish/apply`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      accepted_indices: acceptedIndices,
+    }),
+  });
+
+  return handleResponse<PolishApplyResponse>(response);
+}
+
+/**
+ * GET /api/polish/download/{sessionId} — 下载润色后的文档
+ */
+export async function downloadPolishedFile(sessionId: string): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE}/polish/download/${sessionId}`
+  );
+
+  if (!response.ok) {
+    let errorData: ErrorResponse | null = null;
+    try {
+      const body = await response.json();
+      errorData = body.detail || body;
+    } catch {
+      // 无法解析 JSON
+    }
+
+    throw new ApiError(
+      errorData?.error || "DOWNLOAD_ERROR",
+      errorData?.message || "下载润色文件失败",
+      response.status
+    );
+  }
+
+  return response.blob();
 }

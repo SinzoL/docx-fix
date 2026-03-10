@@ -155,26 +155,29 @@ export default function UploadPanel({
       <div className="glass-card rounded-2xl overflow-hidden shadow-xl shadow-blue-500/5 border border-white/60">
         
         {/* 卡片头部：选择模板 */}
-        <div className="bg-white/40 p-4 sm:p-6 border-b border-slate-200/50">
+        <div className="bg-gradient-to-br from-white/60 to-slate-50/40 p-4 sm:p-6 border-b border-slate-200/50">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex-1 w-full">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                第一步：选择检查标准
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
+                <span className="flex items-center justify-center w-5 h-5 rounded-md bg-blue-600 text-white text-xs font-bold">1</span>
+                选择检查标准
               </label>
-              <div className="relative max-w-full sm:max-w-lg">
+              <div className="relative max-w-full sm:max-w-lg rule-select-wrapper">
                 <Select
                   value={selectedRuleId}
                   onChange={(val) => handleRuleChange(val as string)}
                   loading={rulesLoading}
-                  placeholder="选择检查标准"
+                  placeholder="请选择一个检查规则模板..."
                   size="large"
-                  className="!border-white/80 shadow-sm bg-white/80"
-                  style={{ width: "100%", borderRadius: "0.75rem" }}
                   popupProps={{
+                    overlayClassName: "rule-select-popup",
                     overlayInnerStyle: { 
-                      padding: "8px", 
-                      borderRadius: "12px", 
-                      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" 
+                      padding: "6px", 
+                      borderRadius: "14px", 
+                      boxShadow: "0 20px 40px -8px rgba(0, 0, 0, 0.12), 0 8px 16px -6px rgba(0, 0, 0, 0.08)",
+                      border: "1px solid rgba(226, 232, 240, 0.8)",
+                      backdropFilter: "blur(16px)",
+                      background: "rgba(255, 255, 255, 0.96)",
                     }
                   }}
                 >
@@ -186,22 +189,27 @@ export default function UploadPanel({
                           key={rule.id}
                           value={rule.id}
                           label={rule.name}
-                          className="rounded-lg mb-1 hover:bg-blue-50/50"
+                          className="rule-select-option"
                         >
-                          <div className="py-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-slate-800">{rule.name}</span>
-                              {rule.is_preset && (
-                                <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                                  预设
-                                </span>
+                          <div className="flex items-start gap-3 py-1.5">
+                            <span className="flex-shrink-0 mt-0.5 w-8 h-8 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200/60 flex items-center justify-center">
+                              <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-slate-800 text-sm">{rule.name}</span>
+                                {rule.is_preset && (
+                                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-blue-50 text-blue-600 border border-blue-200/60">
+                                    官方
+                                  </span>
+                                )}
+                              </div>
+                              {rule.description && (
+                                <div className="text-xs text-slate-400 mt-0.5 whitespace-normal leading-relaxed truncate">
+                                  {rule.description}
+                                </div>
                               )}
                             </div>
-                            {rule.description && (
-                              <div className="text-xs text-slate-500 mt-1 whitespace-normal leading-relaxed">
-                                {rule.description}
-                              </div>
-                            )}
                           </div>
                         </Select.Option>
                       ))}
@@ -215,24 +223,37 @@ export default function UploadPanel({
                           key={`custom:${rule.id}`}
                           value={`custom:${rule.id}`}
                           label={rule.name}
-                          className="rounded-lg mb-1 hover:bg-purple-50/50"
+                          className="rule-select-option"
                         >
-                          <div className="py-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-slate-800">{rule.name}</span>
-                              <span className={`px-1.5 py-0.5 text-xs rounded-full border ${
-                                rule.source === 'template-extract'
-                                  ? 'bg-violet-100 text-violet-700 border-violet-200'
-                                  : 'bg-amber-100 text-amber-700 border-amber-200'
-                              }`}>
-                                {rule.source === 'template-extract' ? '模板提取' : 'AI 生成'}
-                              </span>
-                            </div>
-                            {rule.source_filename && (
-                              <div className="text-xs text-slate-500 mt-1">
-                                来源: {rule.source_filename}
+                          <div className="flex items-start gap-3 py-1.5">
+                            <span className={`flex-shrink-0 mt-0.5 w-8 h-8 rounded-lg border flex items-center justify-center ${
+                              rule.source === 'template-extract'
+                                ? 'bg-gradient-to-br from-violet-50 to-violet-100 border-violet-200/60'
+                                : 'bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200/60'
+                            }`}>
+                              {rule.source === 'template-extract' ? (
+                                <svg className="w-4 h-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                              ) : (
+                                <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" /></svg>
+                              )}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-slate-800 text-sm">{rule.name}</span>
+                                <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-md border ${
+                                  rule.source === 'template-extract'
+                                    ? 'bg-violet-50 text-violet-600 border-violet-200/60'
+                                    : 'bg-amber-50 text-amber-600 border-amber-200/60'
+                                }`}>
+                                  {rule.source === 'template-extract' ? '模板提取' : 'AI 生成'}
+                                </span>
                               </div>
-                            )}
+                              {rule.source_filename && (
+                                <div className="text-xs text-slate-400 mt-0.5 truncate">
+                                  来源: {rule.source_filename}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </Select.Option>
                       ))}
@@ -242,11 +263,12 @@ export default function UploadPanel({
               </div>
               {/* #12: 引导用户去提取/创建自定义规则 */}
               {customRules.length === 0 && onGoToExtract && (
-                <p className="text-xs text-slate-400 mt-2">
+                <p className="text-xs text-slate-400 mt-2.5 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
                   没有找到合适的规则？
                   <button
                     onClick={onGoToExtract}
-                    className="text-blue-500 hover:text-blue-600 hover:underline font-medium ml-1 cursor-pointer"
+                    className="text-blue-500 hover:text-blue-600 hover:underline font-medium cursor-pointer transition-colors"
                   >
                     去提取 / 创建自定义规则 →
                   </button>
@@ -254,7 +276,7 @@ export default function UploadPanel({
               )}
             </div>
             {/* 可选的规则解释小提示 */}
-            <div className="text-xs text-slate-500 bg-slate-100/80 px-4 py-2 rounded-lg max-w-xs hidden md:block border border-slate-200/50">
+            <div className="flex items-start gap-2 text-xs text-slate-500 bg-gradient-to-br from-blue-50/60 to-slate-50/80 px-4 py-3 rounded-xl max-w-xs hidden md:block border border-blue-100/50">
               <SvgIcon name="lightbulb" size={14} /> 检查报告将基于此检查标准包含的段落、字体、页边距等规则生成。
             </div>
           </div>
@@ -262,8 +284,9 @@ export default function UploadPanel({
 
         {/* 文件上传区域 */}
         <div className="p-4 sm:p-6">
-          <label className="block text-sm font-semibold text-slate-700 mb-3">
-            第二步：上传目标文档
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
+            <span className="flex items-center justify-center w-5 h-5 rounded-md bg-blue-600 text-white text-xs font-bold">2</span>
+            上传目标文档
           </label>
           <Upload
             theme="custom"
