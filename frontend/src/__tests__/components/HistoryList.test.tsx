@@ -109,7 +109,7 @@ describe("HistoryList", () => {
     render(<HistoryList />);
 
     await waitFor(() => {
-      expect(screen.getByText(/历史记录 \(2\)/)).toBeInTheDocument();
+      expect(screen.getByText(/历史检查/)).toBeInTheDocument();
     });
   });
 });

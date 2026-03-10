@@ -22,6 +22,7 @@ from api.schemas import (
     RuleDetailSection,
     RuleDetailItem,
     CheckReport,
+    RecheckRequest,
     FixRequest,
     FixReport,
     ErrorResponse,
@@ -328,6 +329,120 @@ async def check_file(
         )
     finally:
         # 清理自定义规则临时文件
+        if custom_rules_tmpfile and os.path.exists(custom_rules_tmpfile.name):
+            os.unlink(custom_rules_tmpfile.name)
+
+
+# ========================================
+# POST /recheck — 使用已上传文件切换规则重新检查
+# ========================================
+@router.post("/recheck", response_model=CheckReport)
+async def recheck_file(request: RecheckRequest):
+    """使用已上传的文件，切换到新的规则重新执行格式检查。
+
+    前端在切换规则模板时调用此端点，无需重新上传文件。
+    """
+    _validate_session_id(request.session_id)
+    session_dir = _safe_session_dir(request.session_id)
+
+    # 验证 session 存在
+    if not os.path.exists(session_dir):
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                error="SESSION_NOT_FOUND",
+                message="会话不存在或已过期，请重新上传文件"
+            ).model_dump(),
+        )
+
+    # 读取元信息
+    meta_path = os.path.join(session_dir, "_meta.txt")
+    if not os.path.exists(meta_path):
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                error="SESSION_NOT_FOUND",
+                message="会话元数据丢失，请重新上传文件"
+            ).model_dump(),
+        )
+
+    with open(meta_path, "r") as f:
+        lines = f.read().strip().split("\n")
+        filename = lines[0] if lines else "unknown.docx"
+
+    # 查找上传的文件
+    filepath = os.path.join(session_dir, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                error="SESSION_NOT_FOUND",
+                message="原始文件不存在，请重新上传"
+            ).model_dump(),
+        )
+
+    # 处理规则来源
+    custom_rules_tmpfile = None
+    if request.custom_rules_yaml:
+        try:
+            os.makedirs(TEMP_DIR, exist_ok=True)
+            custom_rules_tmpfile = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", delete=False, dir=TEMP_DIR
+            )
+            custom_rules_tmpfile.write(request.custom_rules_yaml)
+            custom_rules_tmpfile.close()
+            rules_path = custom_rules_tmpfile.name
+            rule_name = "自定义规则"
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse(
+                    error="INVALID_CUSTOM_RULES",
+                    message="自定义规则内容无效"
+                ).model_dump(),
+            )
+    else:
+        rules_path = get_rule_path(request.rule_id)
+        if rules_path is None:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse(
+                    error="INVALID_RULE",
+                    message=f"规则 '{request.rule_id}' 不存在"
+                ).model_dump(),
+            )
+        rule_name = request.rule_id
+        rules_list_data = get_rules_list()
+        for r in rules_list_data:
+            if r.id == request.rule_id:
+                rule_name = r.name
+                break
+
+    # 更新元信息中的 rule_id
+    with open(meta_path, "w") as f:
+        f.write(f"{filename}\n{request.rule_id}")
+
+    # 执行检查
+    try:
+        report = run_check(
+            filepath=filepath,
+            rules_path=rules_path,
+            session_id=request.session_id,
+            filename=filename,
+            rule_id=request.rule_id,
+            rule_name=rule_name,
+        )
+        return report
+    except Exception as e:
+        logger.error(f"重新检查失败: session_id={request.session_id}, error={e}")
+        raise HTTPException(
+            status_code=422,
+            detail=ErrorResponse(
+                error="RECHECK_ERROR",
+                message=f"重新检查失败: {str(e)}"
+            ).model_dump(),
+        )
+    finally:
         if custom_rules_tmpfile and os.path.exists(custom_rules_tmpfile.name):
             os.unlink(custom_rules_tmpfile.name)
 

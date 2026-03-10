@@ -21,6 +21,7 @@ import { fetchRules } from "../services/api";
 import RuleDetail from "./RuleDetail";
 import AiSummary from "./AiSummary";
 import AiChatPanel from "./AiChatPanel";
+import { SvgIcon } from "./icons/SvgIcon";
 
 interface CheckReportProps {
   report: CheckReportType;
@@ -32,9 +33,9 @@ interface CheckReportProps {
 
 // 状态颜色和图标映射
 const STATUS_CONFIG = {
-  PASS: { color: "success" as const, icon: "✓", label: "通过" },
-  WARN: { color: "warning" as const, icon: "⚠", label: "警告" },
-  FAIL: { color: "danger" as const, icon: "✗", label: "失败" },
+  PASS: { color: "success" as const, icon: "check", label: "通过" },
+  WARN: { color: "warning" as const, icon: "alert-triangle", label: "警告" },
+  FAIL: { color: "danger" as const, icon: "x-circle", label: "失败" },
 };
 
 export default function CheckReportView({
@@ -64,27 +65,7 @@ export default function CheckReportView({
 
     setRecheckLoading(true);
     try {
-      // 使用 fetch 直接调 POST /api/check 重新检查
-      // 由于文件已在 session 中，我们需要重新上传
-      // 但服务器还保存着文件，所以我们使用新的 session 重新检查
-      const resp = await fetch(`/api/check`, {
-        method: "POST",
-        body: (() => {
-          const fd = new FormData();
-          // 服务器文件还在，但我们需要提交新的 rule_id
-          // 实际上需要重新读取文件——这里简化为发送空文件重新检查
-          // 更好的方式是后端提供 recheck 端点
-          fd.append("rule_id", ruleId as string);
-          fd.append("session_id", sessionId);
-          return fd;
-        })(),
-      });
-
-      if (!resp.ok) {
-        throw new Error("重新检查失败");
-      }
-
-      const newReport = await resp.json();
+      const newReport = await recheckFile(sessionId, ruleId);
       onRecheck(newReport);
       MessagePlugin.success(`已切换为「${rules.find(r => r.id === ruleId)?.name || ruleId}」规则并重新检查`);
     } catch {
@@ -111,6 +92,34 @@ export default function CheckReportView({
   const hasFixable = report.summary.fixable > 0;
   const allPass = report.summary.fail === 0 && report.summary.warn === 0;
 
+  // 折叠状态：全 PASS 的类别默认折叠，含 FAIL/WARN 的默认展开
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const cat of categories) {
+      const hasIssues = groupedItems[cat].some(i => i.status !== 'PASS');
+      init[cat] = !hasIssues; // 全 PASS → 折叠
+    }
+    return init;
+  });
+
+  const someCollapsed = categories.some(cat => collapsed[cat]);
+
+  const toggleCategory = (cat: string) => {
+    setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
+  const expandAll = () => {
+    const next: Record<string, boolean> = {};
+    for (const cat of categories) next[cat] = false;
+    setCollapsed(next);
+  };
+
+  const collapseAll = () => {
+    const next: Record<string, boolean> = {};
+    for (const cat of categories) next[cat] = true;
+    setCollapsed(next);
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* AI 总结卡片 */}
@@ -124,7 +133,7 @@ export default function CheckReportView({
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 mb-6 relative z-10">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-800 font-display flex items-center gap-2">
-              <span className="text-blue-500">📊</span> 检查诊断报告
+              <span className="text-blue-500"><SvgIcon name="chart-bar" size={22} /></span> 检查诊断报告
             </h2>
             <p className="text-sm font-medium text-slate-500 mt-2 flex items-center gap-2">
               <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{report.filename}</span> 
@@ -139,7 +148,7 @@ export default function CheckReportView({
               onClick={() => setChatVisible(true)}
               className="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm flex items-center gap-2 cursor-pointer"
             >
-              <span className="text-base">💬</span> AI 问答
+              <span className="text-base"><SvgIcon name="message-circle" size={16} /></span> AI 问答
             </button>
 
             {/* 查看规则详情按钮 */}
@@ -147,7 +156,7 @@ export default function CheckReportView({
               onClick={() => setDrawerVisible(true)}
               className="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 cursor-pointer"
             >
-              <span className="text-base">📋</span> 规则详情
+              <span className="text-base"><SvgIcon name="clipboard-list" size={16} /></span> 规则详情
             </button>
 
             {/* 修复按钮 */}
@@ -165,7 +174,7 @@ export default function CheckReportView({
               }`}
             >
               {allPass
-                ? "🎉 完美文档"
+                ? <><SvgIcon name="check" size={16} /> 完美文档</>
                 : !hasFixable
                   ? "无可修复项"
                   : fixLoading
@@ -174,7 +183,7 @@ export default function CheckReportView({
                         自动修复中...
                       </>
                     : <>
-                        <span className="text-base">✨</span> 一键智能修复 ({report.summary.fixable})
+                        <span className="text-base"><SvgIcon name="sparkles" size={16} /></span> 一键智能修复 ({report.summary.fixable})
                       </>}
             </button>
           </div>
@@ -239,33 +248,55 @@ export default function CheckReportView({
 
       {/* 按类别分组的详细报告 */}
       <div className="space-y-4">
-        <h3 className="text-lg font-bold text-slate-800 font-display px-2 pt-2">具体检查项详情</h3>
+        <div className="flex items-center justify-between px-2 pt-2">
+          <h3 className="text-lg font-bold text-slate-800 font-display">具体检查项详情</h3>
+          <button
+            onClick={someCollapsed ? expandAll : collapseAll}
+            className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <SvgIcon name={someCollapsed ? 'expand' : 'collapse'} size={14} />
+            {someCollapsed ? '展开全部' : '收起全部'}
+          </button>
+        </div>
         
         {categories.map((category) => {
           const items = groupedItems[category];
           const categoryFails = items.filter((i) => i.status === "FAIL").length;
           const categoryWarns = items.filter((i) => i.status === "WARN").length;
+          const categoryPasses = items.filter((i) => i.status === "PASS").length;
+          const isCollapsed = collapsed[category] ?? false;
 
           return (
             <div
               key={category}
               className="glass-card rounded-xl overflow-hidden border border-white/60 transition-all hover:border-blue-200"
             >
-              {/* 类别头部 */}
-              <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+              {/* 类别头部 - 可点击折叠/展开 */}
+              <div
+                data-testid="category-header"
+                onClick={() => toggleCategory(category)}
+                className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 cursor-pointer select-none hover:bg-slate-100/80 transition-colors"
+              >
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <span className="w-2 h-6 bg-blue-500 rounded-full"></span>
+                  <span className="text-slate-400 transition-transform" style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
+                    <SvgIcon name="chevron-right" size={16} />
+                  </span>
                   {category}
                 </h3>
                 <div className="flex gap-2 text-sm font-bold">
-                  {categoryFails > 0 && (
-                    <span className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg">
-                      {categoryFails} 项失败
+                  {categoryPasses > 0 && (
+                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg">
+                      {categoryPasses} 项通过
                     </span>
                   )}
                   {categoryWarns > 0 && (
                     <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg">
                       {categoryWarns} 项警告
+                    </span>
+                  )}
+                  {categoryFails > 0 && (
+                    <span className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg">
+                      {categoryFails} 项失败
                     </span>
                   )}
                   {categoryFails === 0 && categoryWarns === 0 && (
@@ -276,8 +307,8 @@ export default function CheckReportView({
                 </div>
               </div>
 
-              {/* 检查项列表 */}
-              <div className="divide-y divide-slate-100/50">
+              {/* 检查项列表 - 折叠时隐藏 */}
+              {!isCollapsed && <div className="divide-y divide-slate-100/50">
                 {items.map((item, index) => {
                   const config = STATUS_CONFIG[item.status];
                   return (
@@ -291,7 +322,7 @@ export default function CheckReportView({
                         item.status === 'WARN' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                         'bg-rose-50 text-rose-700 border-rose-200'
                       }`}>
-                        <span>{config.icon}</span> {config.label}
+                        <SvgIcon name={config.icon} size={14} /> {config.label}
                       </span>
 
                       {/* 内容 */}
@@ -315,8 +346,8 @@ export default function CheckReportView({
                         </p>
                         {item.location && (
                           <div className="flex items-center gap-1 mt-2">
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs font-medium font-mono">
-                              📍 {item.location}
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs font-medium font-mono flex items-center gap-1">
+                              <SvgIcon name="map-pin" size={12} /> {item.location}
                             </span>
                           </div>
                         )}
@@ -324,7 +355,7 @@ export default function CheckReportView({
                     </div>
                   );
                 })}
-              </div>
+              </div>}
             </div>
           );
         })}

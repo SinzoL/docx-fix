@@ -16,6 +16,7 @@ import { CheckCircleIcon } from "tdesign-icons-react";
 import { extractRules, generateRules } from "../services/api";
 import { save as saveRule, isAvailable, isNearLimit } from "../services/ruleStorage";
 import RuleManager from "./RuleManager";
+import { SvgIcon } from "./icons/SvgIcon";
 import {
   highlightYaml,
   parseYamlSections,
@@ -35,12 +36,12 @@ const SUMMARY_MODULES: {
   label: string;
   icon: string;
 }[] = [
-  { key: "has_page_setup", label: "页面设置", icon: "📄" },
-  { key: "has_header_footer", label: "页眉页脚", icon: "📑" },
-  { key: "has_numbering", label: "编号定义", icon: "🔢" },
-  { key: "has_structure", label: "文档结构", icon: "📋" },
-  { key: "has_special_checks", label: "特殊检查", icon: "🔍" },
-  { key: "has_heading_style_fix", label: "标题修复", icon: "✏️" },
+  { key: "has_page_setup", label: "页面设置", icon: "ruler" },
+  { key: "has_header_footer", label: "页眉页脚", icon: "bookmark" },
+  { key: "has_numbering", label: "编号定义", icon: "hash" },
+  { key: "has_structure", label: "文档结构", icon: "clipboard-list" },
+  { key: "has_special_checks", label: "特殊检查", icon: "search" },
+  { key: "has_heading_style_fix", label: "标题修复", icon: "wrench" },
 ];
 
 export default function ExtractPanel() {
@@ -234,7 +235,7 @@ export default function ExtractPanel() {
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              📄 上传模板
+                <SvgIcon name="file-text" size={16} /> 上传模板
             </button>
             <button
               onClick={() => { setMode("text"); setLlmError(""); setErrorMsg(""); }}
@@ -244,7 +245,7 @@ export default function ExtractPanel() {
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              ✍️ 文字描述
+                <SvgIcon name="wrench" size={16} /> 文字描述
             </button>
           </div>
         </div>
@@ -257,7 +258,7 @@ export default function ExtractPanel() {
           <div className="bg-white/40 p-4 sm:p-6 border-b border-slate-200/50">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-tr from-violet-500 to-purple-500 rounded-xl flex items-center justify-center text-white text-lg shadow-lg shadow-purple-500/30">
-                🧬
+                <SvgIcon name="dna" size={20} />
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-800">
@@ -339,7 +340,7 @@ export default function ExtractPanel() {
             {/* 错误提示 */}
             {state === "error" && errorMsg && (
               <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-                ❌ {errorMsg}
+                <SvgIcon name="x-circle" size={14} /> {errorMsg}
               </div>
             )}
           </div>
@@ -368,7 +369,7 @@ export default function ExtractPanel() {
           <div className="bg-white/40 p-4 sm:p-6 border-b border-slate-200/50">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-tr from-amber-500 to-orange-500 rounded-xl flex items-center justify-center text-white text-lg shadow-lg shadow-amber-500/30">
-                ✍️
+                <SvgIcon name="wrench" size={20} />
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-800">
@@ -393,7 +394,7 @@ export default function ExtractPanel() {
             {/* LLM 不可用降级提示 */}
             {llmError && (
               <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm flex items-start gap-2">
-                <span className="text-base mt-0.5">⚠️</span>
+                <span className="text-base mt-0.5"><SvgIcon name="alert-triangle" size={16} /></span>
                 <div>
                   <p className="font-semibold">AI 服务暂不可用</p>
                   <p className="mt-1 text-amber-600">{llmError}</p>
@@ -404,7 +405,7 @@ export default function ExtractPanel() {
             {/* 普通错误提示 */}
             {state === "error" && errorMsg && !llmError && (
               <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-                ❌ {errorMsg}
+                <SvgIcon name="x-circle" size={14} /> {errorMsg}
               </div>
             )}
           </div>
@@ -423,7 +424,7 @@ export default function ExtractPanel() {
                   : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 hover:shadow-amber-500/30 hover:-translate-y-0.5 cursor-pointer"
               }`}
             >
-              {llmLoading ? "AI 生成中..." : "🤖 生成规则"}
+              {llmLoading ? "AI 生成中..." : <><SvgIcon name="bot" size={16} /> 生成规则</>}
             </button>
           </div>
         </div>
@@ -441,7 +442,7 @@ export default function ExtractPanel() {
             <div className="absolute inset-0 border-4 border-purple-100 rounded-full"></div>
             <div className="absolute inset-0 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
             <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl">
-              🧬
+              <SvgIcon name="dna" size={24} />
             </div>
           </div>
           <h3 className="text-xl sm:text-2xl font-bold text-slate-800 font-display">
@@ -460,7 +461,7 @@ export default function ExtractPanel() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-2xl font-bold text-slate-800 font-display">
-                提取完成 ✨
+                提取完成 <SvgIcon name="sparkles" size={18} />
               </h3>
               <p className="text-sm text-slate-500 mt-1">
                 从{" "}
@@ -487,7 +488,7 @@ export default function ExtractPanel() {
                 onClick={() => setSaveDialogVisible(true)}
                 className="px-6 py-2 text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 rounded-xl hover:from-violet-500 hover:to-purple-500 shadow-lg hover:shadow-purple-500/30 transition-all cursor-pointer"
               >
-                💾 保存规则
+                <SvgIcon name="folder" size={14} /> 保存规则
               </button>
             </div>
           </div>
@@ -523,7 +524,7 @@ export default function ExtractPanel() {
                 />
               </div>
               <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
-                💡 规则将保存在浏览器本地存储中，30 天后自动过期。不同设备/浏览器的规则互不影响。
+                <SvgIcon name="lightbulb" size={14} /> 规则将保存在浏览器本地存储中，30 天后自动过期。不同设备/浏览器的规则互不影响。
               </div>
             </div>
           </Dialog>
@@ -544,7 +545,7 @@ function SummaryCard({ summary }: { summary: ExtractSummary }) {
 
   return (
     <div className="glass-card rounded-2xl p-5 sm:p-6 border border-white/60">
-      <h4 className="text-base font-bold text-slate-700 mb-4">📊 提取摘要</h4>
+      <h4 className="text-base font-bold text-slate-700 mb-4"><SvgIcon name="chart-bar" size={16} /> 提取摘要</h4>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {/* 样式数量统计 */}
@@ -569,7 +570,7 @@ function SummaryCard({ summary }: { summary: ExtractSummary }) {
                   : "bg-slate-50 border-slate-100/50 opacity-50"
               }`}
             >
-              <div className="text-2xl">{mod.icon}</div>
+              <div className="text-2xl"><SvgIcon name={mod.icon} size={24} /></div>
               <div className="text-xs font-medium text-slate-600 mt-1">
                 {mod.label}
               </div>
@@ -578,7 +579,7 @@ function SummaryCard({ summary }: { summary: ExtractSummary }) {
                   detected ? "text-emerald-600" : "text-slate-400"
                 }`}
               >
-                {detected ? "✓ 已检测" : "— 未检测到"}
+                {detected ? <><SvgIcon name="check" size={12} /> 已检测</> : "— 未检测到"}
               </div>
             </div>
           );
@@ -588,7 +589,7 @@ function SummaryCard({ summary }: { summary: ExtractSummary }) {
       {/* 页面设置信息 */}
       {summary.page_setup_info && (
         <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm text-slate-600">
-          📄 纸张：{summary.page_setup_info.paper_size}（
+          <SvgIcon name="file-text" size={14} /> 纸张：{summary.page_setup_info.paper_size}（
           {summary.page_setup_info.width_cm} × {summary.page_setup_info.height_cm} cm）
         </div>
       )}
@@ -643,7 +644,7 @@ function YamlPreview({ yamlContent }: { yamlContent: string }) {
   return (
     <div className="glass-card rounded-2xl overflow-hidden border border-white/60">
       <div className="bg-white/40 px-5 py-4 border-b border-slate-200/50 flex items-center justify-between">
-        <h4 className="text-base font-bold text-slate-700">📝 YAML 规则预览</h4>
+        <h4 className="text-base font-bold text-slate-700"><SvgIcon name="document" size={16} /> YAML 规则预览</h4>
         <span className="text-xs text-slate-400 font-mono">
           {sections.length} 节 · {yamlContent.split("\n").length} 行
         </span>
@@ -673,6 +674,7 @@ function YamlPreview({ yamlContent }: { yamlContent: string }) {
             {expandedSections.has(index) && (
               <div className="px-5 pb-4">
                 <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto text-sm leading-relaxed font-mono">
+                  {/* SECURITY: dangerouslySetInnerHTML 安全 — highlightYaml 内部对所有输入先做 escapeHtml 转义，再拼接 <span> 标签 */}
                   <code
                     dangerouslySetInnerHTML={{
                       __html: highlightYaml(section.content),

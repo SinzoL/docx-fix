@@ -11,6 +11,7 @@ import Markdown from "react-markdown";
 import { Drawer, Input } from "tdesign-react";
 import { fetchSSE } from "../services/sse";
 import type { CheckReport } from "../types";
+import { SvgIcon } from "./icons/SvgIcon";
 
 interface AiChatPanelProps {
   /** 是否可见 */
@@ -118,7 +119,7 @@ export default function AiChatPanel({
           if (last && last.role === "assistant") {
             updated[updated.length - 1] = {
               ...last,
-              content: `⚠️ ${err || "AI 暂不可用，请稍后再试"}`,
+              content: `AI 暂不可用：${err || "请稍后再试"}`,
               streaming: false,
             };
           }
@@ -144,7 +145,7 @@ export default function AiChatPanel({
     <Drawer
       visible={visible}
       onClose={onClose}
-      header="💬 AI 格式问答"
+      header={<span className="flex items-center gap-2"><SvgIcon name="message-circle" size={18} /> AI 格式问答</span>}
       size="medium"
       footer={false}
     >
@@ -154,7 +155,7 @@ export default function AiChatPanel({
           {/* 欢迎消息 */}
           {messages.length === 0 && (
             <div className="text-center py-8">
-              <p className="text-4xl mb-3">🤖</p>
+              <p className="text-4xl mb-3"><SvgIcon name="bot" size={48} /></p>
               <p className="text-gray-600 text-sm">
                 我是你的文档格式助手，可以回答关于检查报告的问题。
               </p>

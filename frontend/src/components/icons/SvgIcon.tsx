@@ -1,0 +1,197 @@
+interface SvgIconProps {
+  /** 图标名称，对应 iconPaths 的 key，kebab-case */
+  name: string;
+  /** 图标尺寸（宽高相同），单位 px，默认 20 */
+  size?: number;
+  /** 额外的 CSS 类名，用于自定义颜色等 */
+  className?: string;
+}
+
+/**
+ * 图标 path data 映射表
+ * 所有图标基于 24x24 viewBox，stroke-based 线条风格
+ * path data 来源于 Lucide / Feather 等开源图标集
+ */
+const iconPaths: Record<string, string | string[]> = {
+  // 文件/文档类
+  'document': [
+    'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z',
+    'M14 2v6h6',
+    'M16 13H8',
+    'M16 17H8',
+    'M10 9H8',
+  ],
+  'file-text': [
+    'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z',
+    'M14 2v6h6',
+    'M16 13H8',
+    'M16 17H8',
+    'M10 9H8',
+  ],
+  'folder': [
+    'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z',
+  ],
+  'clipboard-list': [
+    'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2',
+    'M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z',
+    'M12 11h4',
+    'M12 16h4',
+    'M8 11h.01',
+    'M8 16h.01',
+  ],
+  'bookmark': [
+    'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
+  ],
+
+  // 状态类
+  'check': [
+    'M20 6L9 17l-5-5',
+  ],
+  'alert-triangle': [
+    'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z',
+    'M12 9v4',
+    'M12 17h.01',
+  ],
+  'x-circle': [
+    'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z',
+    'M15 9l-6 6',
+    'M9 9l6 6',
+  ],
+
+  // 功能类
+  'search': [
+    'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z',
+    'M21 21l-4.35-4.35',
+  ],
+  'chart-bar': [
+    'M18 20V10',
+    'M12 20V4',
+    'M6 20v-6',
+  ],
+  'message-circle': [
+    'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z',
+  ],
+  'map-pin': [
+    'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z',
+    'M12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  ],
+  'sparkles': [
+    'M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z',
+  ],
+  'bot': [
+    'M12 8V4H8',
+    'M2 14a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4z',
+    'M6 16h.01',
+    'M18 16h.01',
+    'M12 2a4 4 0 0 1 4 4v6H8V6a4 4 0 0 1 4-4z',
+  ],
+  'lightbulb': [
+    'M9 18h6',
+    'M10 22h4',
+    'M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z',
+  ],
+  'dna': [
+    'M2 15c6.667-6 13.333 0 20-6',
+    'M9 3.236s1 2.764 3 2.764 3-2.764 3-2.764',
+    'M15 20.764s-1-2.764-3-2.764-3 2.764-3 2.764',
+    'M2 9c6.667 6 13.333 0 20 6',
+  ],
+  'wrench': [
+    'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
+  ],
+
+  // 布局/结构类
+  'ruler': [
+    'M3 5v14a2 2 0 0 0 2 2h14',
+    'M3 5h4v4H3z',
+    'M7 5v4',
+    'M11 5v2',
+    'M15 5v4',
+    'M19 5v2',
+    'M3 9h4',
+    'M3 13h2',
+    'M3 17h4',
+  ],
+  'hash': [
+    'M4 9h16',
+    'M4 15h16',
+    'M10 3L8 21',
+    'M16 3l-2 18',
+  ],
+  'building': [
+    'M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18',
+    'M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2',
+    'M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2',
+    'M10 6h4',
+    'M10 10h4',
+    'M10 14h4',
+    'M10 18h4',
+  ],
+
+  // 导航/交互类
+  'chevron-down': [
+    'M6 9l6 6 6-6',
+  ],
+  'chevron-right': [
+    'M9 18l6-6-6-6',
+  ],
+  'expand': [
+    'M15 3h6v6',
+    'M9 21H3v-6',
+    'M21 3l-7 7',
+    'M3 21l7-7',
+  ],
+  'collapse': [
+    'M4 14h6v6',
+    'M20 10h-6V4',
+    'M14 10l7-7',
+    'M3 21l7-7',
+  ],
+  'loader': [
+    'M12 2v4',
+    'M12 18v4',
+    'M4.93 4.93l2.83 2.83',
+    'M16.24 16.24l2.83 2.83',
+    'M2 12h4',
+    'M18 12h4',
+    'M4.93 19.07l2.83-2.83',
+    'M16.24 7.76l2.83-2.83',
+  ],
+};
+
+/**
+ * SvgIcon 通用组件
+ * 
+ * 使用内联 SVG 渲染图标，零外部依赖。
+ * 所有图标基于 24x24 viewBox，使用 stroke-based 线条风格，
+ * 通过 currentColor 继承父元素颜色。
+ * 
+ * @example
+ * <SvgIcon name="document" />
+ * <SvgIcon name="check" size={16} className="text-green-600" />
+ */
+export function SvgIcon({ name, size = 20, className }: SvgIconProps) {
+  const paths = iconPaths[name];
+  if (!paths) return null;
+
+  const pathArray = Array.isArray(paths) ? paths : [paths];
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+    >
+      {pathArray.map((d, i) => (
+        <path key={i} d={d} />
+      ))}
+    </svg>
+  );
+}

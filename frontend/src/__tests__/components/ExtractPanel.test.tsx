@@ -117,7 +117,7 @@ describe("ExtractPanel", () => {
         screen.getByPlaceholderText(/示例/)
       ).toBeInTheDocument();
       // 应出现「生成规则」按钮
-      expect(screen.getByText(/生成规则/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /生成规则/ })).toBeInTheDocument();
     });
 
     it("点击「文字描述」再点回「上传模板」应恢复上传模式", () => {
@@ -168,7 +168,7 @@ describe("ExtractPanel", () => {
       render(<ExtractPanel />);
       fireEvent.click(screen.getByText(/文字描述/));
 
-      const btn = screen.getByText(/生成规则/);
+      const btn = screen.getByRole('button', { name: /生成规则/ });
       expect(btn).toBeDisabled();
     });
 
@@ -181,7 +181,7 @@ describe("ExtractPanel", () => {
         target: { value: "正文使用宋体小四号" },
       });
 
-      const btn = screen.getByText(/生成规则/);
+      const btn = screen.getByRole('button', { name: /生成规则/ });
       expect(btn).not.toBeDisabled();
     });
 
@@ -214,7 +214,7 @@ describe("ExtractPanel", () => {
         target: { value: "正文使用宋体小四号" },
       });
 
-      fireEvent.click(screen.getByText(/生成规则/));
+      fireEvent.click(screen.getByRole('button', { name: /生成规则/ }));
 
       await waitFor(() => {
         expect(mockGenerate).toHaveBeenCalledWith("正文使用宋体小四号");
@@ -245,10 +245,10 @@ describe("ExtractPanel", () => {
         target: { value: "测试格式要求" },
       });
 
-      fireEvent.click(screen.getByText(/生成规则/));
+      fireEvent.click(screen.getByRole('button', { name: /生成规则/ }));
 
       await waitFor(() => {
-        expect(screen.getByText(/AI 服务暂不可用/)).toBeInTheDocument();
+        expect(screen.getAllByText(/AI 服务暂不可用/).length).toBeGreaterThanOrEqual(1);
       });
     });
   });
@@ -270,7 +270,7 @@ describe("ExtractPanel", () => {
       fireEvent.change(textarea, {
         target: { value: "正文宋体小四" },
       });
-      fireEvent.click(screen.getByText(/生成规则/));
+      fireEvent.click(screen.getByRole('button', { name: /生成规则/ }));
 
       await waitFor(() => {
         expect(screen.getByText(/保存规则/)).toBeInTheDocument();

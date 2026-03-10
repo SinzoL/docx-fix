@@ -50,24 +50,24 @@ describe("UploadPanel", () => {
   it("应渲染上传区域", () => {
     render(<UploadPanel {...defaultProps} />);
     expect(
-      screen.getByText(/拖拽文件到此处，或点击选择/)
+      screen.getByText(/拖拽文件到此处/)
     ).toBeInTheDocument();
   });
 
   it("应渲染检查模板选择器", () => {
     render(<UploadPanel {...defaultProps} />);
-    expect(screen.getByText("检查模板")).toBeInTheDocument();
+    expect(screen.getByText(/检查模板规则/)).toBeInTheDocument();
   });
 
   it("应渲染开始检查按钮", () => {
     render(<UploadPanel {...defaultProps} />);
-    expect(screen.getByText("开始检查")).toBeInTheDocument();
+    expect(screen.getByText(/开始深度检查/)).toBeInTheDocument();
   });
 
   it("应显示文件格式提示", () => {
     render(<UploadPanel {...defaultProps} />);
     expect(
-      screen.getByText(/仅支持 .docx 格式，最大 50MB/)
+      screen.getByText(/\.docx/)
     ).toBeInTheDocument();
   });
 });

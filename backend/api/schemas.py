@@ -98,6 +98,13 @@ class CheckReport(BaseModel):
 # 修复相关
 # ========================================
 
+class RecheckRequest(BaseModel):
+    """POST /api/recheck 请求体 — 使用已上传的文件切换规则重新检查"""
+    session_id: str
+    rule_id: str
+    custom_rules_yaml: Optional[str] = None
+
+
 class FixRequest(BaseModel):
     """POST /api/fix 请求体"""
     session_id: str

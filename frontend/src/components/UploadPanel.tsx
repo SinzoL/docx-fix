@@ -14,6 +14,7 @@ import { CheckCircleIcon } from "tdesign-icons-react";
 import { fetchRules, checkFile } from "../services/api";
 import { getAll as getAllCustomRules, init as initRuleStorage } from "../services/ruleStorage";
 import type { RuleInfo, CheckReport, CustomRule } from "../types";
+import { SvgIcon } from "./icons/SvgIcon";
 
 interface UploadPanelProps {
   onCheckStart: () => void;
@@ -40,7 +41,7 @@ export default function UploadPanel({
   const [rulesLoading, setRulesLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // 加载规则列表（服务端 + 本地）
+  // 加载规则列表（服务端 + 本地）— 仅在组件挂载时执行一次
   useEffect(() => {
     setRulesLoading(true);
 
@@ -62,7 +63,8 @@ export default function UploadPanel({
         MessagePlugin.error("加载规则列表失败");
       })
       .finally(() => setRulesLoading(false));
-  }, [onRuleChange, selectedRuleId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在挂载时执行，selectedRuleId 变化不应重新请求规则列表
+  }, []);
 
   // 监听 storage 事件同步自定义规则
   useEffect(() => {
@@ -176,7 +178,7 @@ export default function UploadPanel({
                 >
                   {/* 预置规则组 */}
                   {rules.length > 0 && (
-                    <Select.OptionGroup label="📋 预置规则" divider={customRules.length > 0}>
+                    <Select.OptionGroup label={<><SvgIcon name="clipboard-list" size={14} /> 预置规则</>} divider={customRules.length > 0}>
                       {rules.map((rule) => (
                         <Select.Option
                           key={rule.id}
@@ -198,7 +200,7 @@ export default function UploadPanel({
                   )}
                   {/* 自定义规则组 */}
                   {customRules.length > 0 && (
-                    <Select.OptionGroup label="📂 我的规则">
+                    <Select.OptionGroup label={<><SvgIcon name="folder" size={14} /> 我的规则</>}>
                       {customRules.map((rule) => (
                         <Select.Option
                           key={`custom:${rule.id}`}
@@ -232,7 +234,7 @@ export default function UploadPanel({
             </div>
             {/* 可选的规则解释小提示 */}
             <div className="text-xs text-slate-500 bg-slate-100/80 px-4 py-2 rounded-lg max-w-xs hidden md:block border border-slate-200/50">
-              💡 检查报告将基于此模板包含的段落、字体、页边距等规则生成。
+              <SvgIcon name="lightbulb" size={14} /> 检查报告将基于此模板包含的段落、字体、页边距等规则生成。
             </div>
           </div>
         </div>

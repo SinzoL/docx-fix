@@ -101,6 +101,35 @@ export async function checkFile(
 }
 
 /**
+ * POST /api/recheck — 使用已上传文件切换规则重新检查
+ *
+ * 无需重新上传文件，复用 session 中已保存的文件。
+ */
+export async function recheckFile(
+  sessionId: string,
+  ruleId: string,
+  customRulesYaml?: string
+): Promise<CheckReport> {
+  const body: Record<string, string> = {
+    session_id: sessionId,
+    rule_id: ruleId,
+  };
+  if (customRulesYaml) {
+    body.custom_rules_yaml = customRulesYaml;
+  }
+
+  const response = await fetch(`${API_BASE}/recheck`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  return handleResponse<CheckReport>(response);
+}
+
+/**
  * POST /api/fix — 执行修复并返回预览
  *
  * 当 customRulesYaml 非空时，使用自定义规则 YAML 内容进行修复。

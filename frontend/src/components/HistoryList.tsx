@@ -17,6 +17,7 @@ import {
   clearAll,
 } from "../services/cache";
 import type { HistoryRecord, CheckReport } from "../types";
+import { SvgIcon } from "./icons/SvgIcon";
 
 interface HistoryListProps {
   onViewReport?: (report: CheckReport) => void;
@@ -85,7 +86,7 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
     return (
       <div className="glass-card rounded-2xl p-12 text-center border-dashed border-2 border-slate-300">
         <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <span className="text-2xl opacity-50">📂</span>
+          <span className="text-2xl opacity-50"><SvgIcon name="folder" size={28} /></span>
         </div>
         <p className="text-lg font-bold text-slate-700 font-display mb-1">暂无历史记录</p>
         <p className="text-sm font-medium text-slate-500">上传并检查文档后，记录将保存在您的浏览器本地</p>
@@ -98,7 +99,7 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
       {/* 头部 */}
       <div className="flex items-center justify-between px-2">
         <h3 className="text-xl font-bold text-slate-800 font-display flex items-center gap-2">
-          <span className="text-blue-500">📂</span> 历史检查 ({records.length})
+          <span className="text-blue-500"><SvgIcon name="folder" size={20} /></span> 历史检查 ({records.length})
         </h3>
         <button
           onClick={() => setClearDialogVisible(true)}
@@ -130,14 +131,14 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
                     </span>
                     {record.fix_report && (
                       <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold border border-emerald-200">
-                        ✨ 已修复
+                        <SvgIcon name="sparkles" size={12} /> 已修复
                       </span>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
                     <span className="bg-slate-100 px-2 py-1 rounded-md">{record.rule_name}</span>
                     <span className="text-slate-300">•</span>
-                    <span className="flex items-center gap-1">🕒 {formatTime(record.created_at)}</span>
+                    <span className="flex items-center gap-1"><SvgIcon name="clock" size={12} /> {formatTime(record.created_at)}</span>
                   </div>
                 </div>
 
@@ -158,7 +159,7 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
                     )}
                     {!hasIssues && (
                       <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-100">
-                        <span className="text-[10px]">✓</span> 全部通过
+                        <span className="text-[10px]"><SvgIcon name="check" size={10} /></span> 全部通过
                       </span>
                     )}
                   </div>
@@ -184,7 +185,7 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
       {/* 清除确认对话框 */}
       <Dialog
         visible={clearDialogVisible}
-        header="⚠️ 确认清除"
+        header="确认清除"
         body="确定要彻底清除所有历史记录吗？此操作不可撤销。"
         confirmBtn="确认清除"
         cancelBtn="取消"

@@ -19,8 +19,8 @@
 
 **Purpose**: 新增基础模块（SvgIcon 组件 + AI 缓存服务），供后续所有 User Story 使用
 
-- [ ] T001 [P] [US2] 创建 SvgIcon 通用组件，包含约 25 个图标的 path data — `frontend/src/components/icons/SvgIcon.tsx`
-- [ ] T002 [P] [US3] 创建 AI 总结内存缓存模块（Map + FIFO 淘汰，50 条上限） — `frontend/src/services/aiCache.ts`
+- [x] T001 [P] [US2] 创建 SvgIcon 通用组件，包含约 25 个图标的 path data — `frontend/src/components/icons/SvgIcon.tsx`
+- [x] T002 [P] [US3] 创建 AI 总结内存缓存模块（Map + FIFO 淘汰，50 条上限） — `frontend/src/services/aiCache.ts`
 
 **Checkpoint**: SvgIcon 组件和 aiCache 模块可独立导入使用
 
@@ -34,7 +34,7 @@
 
 ### Tests for User Story 1
 
-- [ ] T003 [US1] 新增 CheckReport 折叠/展开行为测试 — `frontend/src/__tests__/components/CheckReport.test.tsx`
+- [x] T003 [US1] 新增 CheckReport 折叠/展开行为测试 — `frontend/src/__tests__/components/CheckReport.test.tsx`
   - 测试默认折叠通过类别
   - 测试默认展开含 FAIL/WARN 类别
   - 测试点击切换折叠/展开
@@ -43,7 +43,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] 在 CheckReport.tsx 中实现类别折叠逻辑 — `frontend/src/components/CheckReport.tsx`
+- [x] T004 [US1] 在 CheckReport.tsx 中实现类别折叠逻辑 — `frontend/src/components/CheckReport.tsx`
   - 新增 `collapsed` 状态（`Record<string, boolean>`），初始值基于类别内检查项状态计算
   - 类别头部添加点击事件 + chevron 箭头图标（依赖 T001 的 SvgIcon）
   - 折叠头部显示：类别名 + PASS/WARN/FAIL 计数 badge
@@ -62,7 +62,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T005 [US2] 创建 SvgIcon 组件单元测试 — `frontend/src/__tests__/components/icons/SvgIcon.test.tsx`
+- [x] T005 [US2] 创建 SvgIcon 组件单元测试 — `frontend/src/__tests__/components/icons/SvgIcon.test.tsx`
   - 测试已知图标名正确渲染 `<svg>` 元素
   - 测试未知图标名返回 null
   - 测试 size 属性传递
@@ -73,15 +73,15 @@
 
 > 以下任务均标记 [P]，因为它们操作不同文件，互不依赖。全部依赖 T001（SvgIcon 组件已创建）。
 
-- [ ] T006 [P] [US2] 替换 App.tsx 中的所有 emoji（📝/🔍/🧬/✨/✓） — `frontend/src/App.tsx`
-- [ ] T007 [P] [US2] 替换 CheckReport.tsx 中的所有 emoji（📊/💬/📋/📍）+ STATUS_MAP 状态符号（✓/⚠/✗） — `frontend/src/components/CheckReport.tsx`
-- [ ] T008 [P] [US2] 替换 AiSummary.tsx 中的所有 emoji（✨/⚠️） — `frontend/src/components/AiSummary.tsx`
-- [ ] T009 [P] [US2] 替换 AiChatPanel.tsx 中的所有 emoji（🤖） — `frontend/src/components/AiChatPanel.tsx`
-- [ ] T010 [P] [US2] 替换 FixPreview.tsx 中的所有 emoji（✨/⚠️/✅） — `frontend/src/components/FixPreview.tsx`
-- [ ] T011 [P] [US2] 替换 HistoryList.tsx 中的所有 emoji（📂） — `frontend/src/components/HistoryList.tsx`
-- [ ] T012 [P] [US2] 替换 ExtractPanel.tsx 中的所有 emoji（📐/📑/🔢/🏗️/🔍/🔧/📄/💡/❌/⚠️/🧬） — `frontend/src/components/ExtractPanel.tsx`
-- [ ] T013 [P] [US2] 替换 UploadPanel.tsx 中的所有 emoji（💡/📋/📂），注意 OptionGroup label 需使用 TNode 形式 — `frontend/src/components/UploadPanel.tsx`
-- [ ] T014 [P] [US2] 替换 RuleManager.tsx 中的所有 emoji（📂 x2/📄 x1） — `frontend/src/components/RuleManager.tsx`
+- [x] T006 [P] [US2] 替换 App.tsx 中的所有 emoji（📝/🔍/🧬/✨/✓） — `frontend/src/App.tsx`
+- [x] T007 [P] [US2] 替换 CheckReport.tsx 中的所有 emoji（📊/💬/📋/📍）+ STATUS_MAP 状态符号（✓/⚠/✗） — `frontend/src/components/CheckReport.tsx`
+- [x] T008 [P] [US2] 替换 AiSummary.tsx 中的所有 emoji（✨/⚠️） — `frontend/src/components/AiSummary.tsx`
+- [x] T009 [P] [US2] 替换 AiChatPanel.tsx 中的所有 emoji（🤖） — `frontend/src/components/AiChatPanel.tsx`
+- [x] T010 [P] [US2] 替换 FixPreview.tsx 中的所有 emoji（✨/⚠️/✅） — `frontend/src/components/FixPreview.tsx`
+- [x] T011 [P] [US2] 替换 HistoryList.tsx 中的所有 emoji（📂） — `frontend/src/components/HistoryList.tsx`
+- [x] T012 [P] [US2] 替换 ExtractPanel.tsx 中的所有 emoji（📐/📑/🔢/🏗️/🔍/🔧/📄/💡/❌/⚠️/🧬） — `frontend/src/components/ExtractPanel.tsx`
+- [x] T013 [P] [US2] 替换 UploadPanel.tsx 中的所有 emoji（💡/📋/📂），注意 OptionGroup label 需使用 TNode 形式 — `frontend/src/components/UploadPanel.tsx`
+- [x] T014 [P] [US2] 替换 RuleManager.tsx 中的所有 emoji（📂 x2/📄 x1） — `frontend/src/components/RuleManager.tsx`
 
 **Checkpoint**: 全站零 emoji，所有图标使用 SvgIcon 组件。用 grep 扫描验证：`grep -rn $'[\U0001F300-\U0001F9FF]' frontend/src/`
 
@@ -95,7 +95,7 @@
 
 ### Tests for User Story 3
 
-- [ ] T015 [US3] 创建 aiCache 模块单元测试 — `frontend/src/__tests__/services/aiCache.test.ts`
+- [x] T015 [US3] 创建 aiCache 模块单元测试 — `frontend/src/__tests__/services/aiCache.test.ts`
   - 测试 getCachedSummary/setCachedSummary 基本读写
   - 测试缓存未命中返回 undefined
   - 测试 clearCachedSummary 清除特定条目
@@ -105,7 +105,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] 在 AiSummary.tsx 中集成缓存逻辑 — `frontend/src/components/AiSummary.tsx`
+- [x] T016 [US3] 在 AiSummary.tsx 中集成缓存逻辑 — `frontend/src/components/AiSummary.tsx`
   - 组件挂载时检查 `getCachedSummary(sessionId)`
   - 缓存命中：直接渲染缓存内容，状态跳到 `done`，不发起 SSE
   - 缓存未命中：正常发起 SSE，`done` 回调中调用 `setCachedSummary`
@@ -119,9 +119,9 @@
 
 **Purpose**: 最终验证和清理
 
-- [ ] T017 运行全站 emoji 残留扫描，确认零 emoji — `grep -rn` 扫描 `frontend/src/`
-- [ ] T018 运行完整测试套件确认无回归 — `cd frontend && npm run test`
-- [ ] T019 按 quickstart.md 执行端到端验证（SVG Icon / 折叠交互 / AI 缓存）
+- [x] T017 运行全站 emoji 残留扫描，确认零 emoji — `grep -rn` 扫描 `frontend/src/`
+- [x] T018 运行完整测试套件确认无回归 — `cd frontend && npm run test`
+- [x] T019 按 quickstart.md 执行端到端验证（SVG Icon / 折叠交互 / AI 缓存）
 
 ---
 

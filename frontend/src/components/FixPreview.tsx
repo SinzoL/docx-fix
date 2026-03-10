@@ -12,6 +12,7 @@ import { useState, useCallback } from "react";
 import { MessagePlugin } from "tdesign-react";
 import { downloadFixedFile, triggerDownload } from "../services/api";
 import type { FixReport } from "../types";
+import { SvgIcon } from "./icons/SvgIcon";
 
 interface FixPreviewProps {
   report: FixReport;
@@ -53,7 +54,7 @@ export default function FixPreview({
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 mb-6 relative z-10">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-800 font-display flex items-center gap-2">
-              <span className="text-emerald-500">✨</span> 修复结果预览
+              <span className="text-emerald-500"><SvgIcon name="sparkles" size={22} /></span> 修复结果预览
             </h2>
             <p className="text-sm font-medium text-slate-500 mt-2 flex items-center gap-2">
               <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{report.filename}</span> 
@@ -78,7 +79,7 @@ export default function FixPreview({
               </span>
             ) : (
               <>
-                <span className="text-lg">📥</span> 下载修复后文件
+                <span className="text-lg"><SvgIcon name="folder" size={18} /></span> 下载修复后文件
               </>
             )}
           </button>
@@ -90,7 +91,7 @@ export default function FixPreview({
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 relative">
             <h3 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-wider flex items-center justify-between">
               <span>修复前</span>
-              <span className="text-xl">⚠️</span>
+              <span className="text-xl"><SvgIcon name="alert-triangle" size={20} /></span>
             </h3>
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center">
@@ -119,7 +120,7 @@ export default function FixPreview({
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-100/30 to-transparent pointer-events-none"></div>
             <h3 className="text-sm font-bold text-emerald-700 mb-4 uppercase tracking-wider flex items-center justify-between relative z-10">
               <span>修复后</span>
-              <span className="text-xl">✅</span>
+              <span className="text-xl"><SvgIcon name="check" size={20} /></span>
             </h3>
             <div className="grid grid-cols-3 gap-4 relative z-10">
               <div className="text-center">
@@ -156,8 +157,14 @@ export default function FixPreview({
           </div>
           <div className="divide-y divide-slate-100/50">
             {report.changed_items.map((item, index) => {
-              const beforeColor = item.before_status === 'FAIL' ? 'rose' : item.before_status === 'WARN' ? 'amber' : 'emerald';
-              const afterColor = item.after_status === 'PASS' ? 'emerald' : item.after_status === 'WARN' ? 'amber' : 'rose';
+              // 使用完整预定义类名，避免 Tailwind 动态拼接在生产构建时被 tree-shake 掉
+              const STATUS_STYLES = {
+                FAIL: { bg: 'bg-rose-100 text-rose-700 border-rose-200', label: '失败' },
+                WARN: { bg: 'bg-amber-100 text-amber-700 border-amber-200', label: '警告' },
+                PASS: { bg: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: '通过' },
+              } as const;
+              const beforeStyle = STATUS_STYLES[item.before_status as keyof typeof STATUS_STYLES] || STATUS_STYLES.PASS;
+              const afterStyle = STATUS_STYLES[item.after_status as keyof typeof STATUS_STYLES] || STATUS_STYLES.PASS;
               
               return (
                 <div
@@ -165,12 +172,12 @@ export default function FixPreview({
                   className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-emerald-50/30 transition-colors"
                 >
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-${beforeColor}-100 text-${beforeColor}-700 border border-${beforeColor}-200`}>
-                      {item.before_status === 'FAIL' ? '失败' : item.before_status === 'WARN' ? '警告' : '通过'}
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${beforeStyle.bg}`}>
+                      {beforeStyle.label}
                     </span>
                     <span className="text-slate-300">→</span>
-                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-${afterColor}-100 text-${afterColor}-700 border border-${afterColor}-200`}>
-                      {item.after_status === 'FAIL' ? '失败' : item.after_status === 'WARN' ? '警告' : '通过'}
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${afterStyle.bg}`}>
+                      {afterStyle.label}
                     </span>
                   </div>
                   

@@ -22,6 +22,7 @@ import {
   YAML_HIGHLIGHT_STYLES,
 } from "../utils/yamlHighlight";
 import type { CustomRule } from "../types";
+import { SvgIcon } from "./icons/SvgIcon";
 
 /** 来源标签映射 */
 const SOURCE_LABELS: Record<string, { text: string; color: string }> = {
@@ -151,7 +152,7 @@ export default function RuleManager({ onRulesChange }: RuleManagerProps) {
   if (rules.length === 0) {
     return (
       <div className="glass-card rounded-2xl p-6 border border-white/60 text-center">
-        <div className="text-4xl mb-3">📂</div>
+        <div className="text-4xl mb-3"><SvgIcon name="folder" size={40} /></div>
         <h4 className="text-base font-bold text-slate-700">暂无保存的规则</h4>
         <p className="text-sm text-slate-500 mt-1">
           提取模板或使用 AI 生成规则后，可保存到此处方便复用
@@ -167,7 +168,7 @@ export default function RuleManager({ onRulesChange }: RuleManagerProps) {
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
         <h4 className="text-base font-bold text-slate-700">
-          📂 我的规则 <span className="text-sm font-normal text-slate-400">({rules.length})</span>
+          <SvgIcon name="folder" size={16} /> 我的规则 <span className="text-sm font-normal text-slate-400">({rules.length})</span>
         </h4>
       </div>
 
@@ -214,7 +215,7 @@ export default function RuleManager({ onRulesChange }: RuleManagerProps) {
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
                     {rule.source_filename && (
-                      <span>📄 {rule.source_filename}</span>
+                      <span><SvgIcon name="file-text" size={12} /> {rule.source_filename}</span>
                     )}
                     <span>保存于 {formatDate(rule.created_at)}</span>
                     <span
@@ -239,21 +240,21 @@ export default function RuleManager({ onRulesChange }: RuleManagerProps) {
                     className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
                     title="重命名"
                   >
-                    ✏️
+                    <SvgIcon name="wrench" size={14} />
                   </button>
                   <button
                     onClick={() => handleDownload(rule)}
                     className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
                     title="下载 YAML"
                   >
-                    ⬇️
+                    <SvgIcon name="folder" size={14} />
                   </button>
                   <button
                     onClick={() => openDelete(rule)}
                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
                     title="删除"
                   >
-                    🗑️
+                    <SvgIcon name="x-circle" size={14} />
                   </button>
                 </div>
               </div>
@@ -263,6 +264,7 @@ export default function RuleManager({ onRulesChange }: RuleManagerProps) {
                 <div className="px-4 pb-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="mt-3">
                     <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto text-xs leading-relaxed font-mono max-h-80 overflow-y-auto">
+                      {/* SECURITY: dangerouslySetInnerHTML 安全 — highlightYaml 内部对所有输入先做 escapeHtml 转义，再拼接 <span> 标签 */}
                       <code
                         dangerouslySetInnerHTML={{
                           __html: highlightYaml(rule.yaml_content),

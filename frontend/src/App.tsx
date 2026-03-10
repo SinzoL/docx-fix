@@ -16,6 +16,7 @@ import ExtractPanel from "./components/ExtractPanel";
 import CheckReportView from "./components/CheckReport";
 import FixPreview from "./components/FixPreview";
 import HistoryList from "./components/HistoryList";
+import { SvgIcon } from "./components/icons/SvgIcon";
 
 function App() {
   const [appState, setAppState] = useState<AppState>("IDLE");
@@ -150,7 +151,7 @@ function App() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-tr from-blue-500 to-indigo-500 rounded-xl shadow-lg flex items-center justify-center text-white text-xl shadow-blue-500/30">
-                📝
+                <SvgIcon name="document" size={22} />
               </div>
               <div>
                 <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 font-display">
@@ -199,7 +200,7 @@ function App() {
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  🔍 上传检查
+                  <SvgIcon name="search" size={16} /> 上传检查
                 </button>
                 <button
                   onClick={() => setActiveTab("extract")}
@@ -209,7 +210,7 @@ function App() {
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  🧬 提取模板
+                  <SvgIcon name="dna" size={16} /> 提取模板
                 </button>
               </div>
             </div>
@@ -244,7 +245,7 @@ function App() {
             <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6">
               <div className="absolute inset-0 border-4 border-blue-100 rounded-full"></div>
               <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl">🔍</div>
+              <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl"><SvgIcon name="search" size={24} /></div>
             </div>
             <h3 className="text-xl sm:text-2xl font-bold text-slate-800 font-display">正在深度分析文档...</h3>
             <p className="text-sm sm:text-base text-slate-500 mt-2 sm:mt-3 font-medium">
@@ -272,7 +273,7 @@ function App() {
             <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6">
               <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
               <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl">✨</div>
+              <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl"><SvgIcon name="sparkles" size={24} /></div>
             </div>
             <h3 className="text-xl sm:text-2xl font-bold text-slate-800 font-display">正在魔法修复格式...</h3>
             <p className="text-sm sm:text-base text-slate-500 mt-2 sm:mt-3 font-medium">
@@ -296,7 +297,7 @@ function App() {
         {appState === "DOWNLOADED" && (
           <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg mx-auto mt-8 animate-in fade-in zoom-in-95 duration-500">
             <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-tr from-green-400 to-emerald-500 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-6 sm:mb-8 animate-bounce">
-              <span className="text-3xl sm:text-4xl text-white">✓</span>
+              <span className="text-3xl sm:text-4xl text-white"><SvgIcon name="check" size={36} /></span>
             </div>
             <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2 sm:mb-3 font-display">大功告成！</h3>
             <p className="text-base sm:text-lg text-slate-600">

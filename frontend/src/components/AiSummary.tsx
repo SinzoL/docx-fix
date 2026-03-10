@@ -11,6 +11,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Markdown from "react-markdown";
 import { fetchSSE } from "../services/sse";
 import type { CheckReport } from "../types";
+import { SvgIcon } from "./icons/SvgIcon";
+import { getCachedSummary, setCachedSummary, clearCachedSummary } from "../services/aiCache";
 
 interface AiSummaryProps {
   /** 检查报告数据 */
@@ -38,6 +40,9 @@ export default function AiSummary({ report }: AiSummaryProps) {
     setContent("");
     setErrorMsg("");
 
+    // 用于累积完整内容（回调中无法直接读 content state）
+    let fullContent = "";
+
     fetchSSE("/api/ai/summarize", {
       body: {
         session_id: report.session_id,
@@ -45,10 +50,15 @@ export default function AiSummary({ report }: AiSummaryProps) {
       },
       onToken: (token) => {
         setState("streaming");
+        fullContent += token;
         setContent((prev) => prev + token);
       },
       onDone: () => {
         setState("done");
+        // SSE 完成后写入缓存
+        if (fullContent) {
+          setCachedSummary(report.session_id, fullContent);
+        }
       },
       onError: (err) => {
         setState("error");
@@ -60,13 +70,22 @@ export default function AiSummary({ report }: AiSummaryProps) {
 
   // 检查报告加载完成后自动开始 AI 总结
   useEffect(() => {
-    // 全部通过时也尝试生成（会返回简短恭喜语）
     if (!requestedRef.current) {
       requestedRef.current = true;
-      // 使用 queueMicrotask 避免在 effect 中同步调用 setState
-      queueMicrotask(() => {
-        startSummarize();
-      });
+      // 优先检查缓存
+      const cached = getCachedSummary(report.session_id);
+      if (cached) {
+        // 缓存命中：通过 queueMicrotask 避免在 effect 中直接同步 setState
+        queueMicrotask(() => {
+          setContent(cached);
+          setState("done");
+        });
+      } else {
+        // 缓存未命中：正常发起 SSE
+        queueMicrotask(() => {
+          startSummarize();
+        });
+      }
     }
 
     return () => {
@@ -90,7 +109,7 @@ export default function AiSummary({ report }: AiSummaryProps) {
       <div className="relative z-10">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-            <span className="text-sm">✨</span>
+            <SvgIcon name="sparkles" size={16} />
           </div>
           <h3 className="text-lg font-bold text-slate-800 font-display bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700">
             AI 深度诊断分析
@@ -107,11 +126,13 @@ export default function AiSummary({ report }: AiSummaryProps) {
         {state === "error" && (
           <div className="flex items-center justify-between p-4 bg-rose-50/80 border border-rose-100 rounded-xl">
             <p className="text-sm font-medium text-rose-600 flex items-center gap-2">
-              <span className="text-lg">⚠️</span>
+              <span className="text-lg"><SvgIcon name="alert-triangle" size={18} /></span>
               AI 分析遇到问题{errorMsg ? `：${errorMsg}` : ""}
             </p>
             <button
               onClick={() => {
+                // 清除缓存后重新发起 SSE
+                clearCachedSummary(report.session_id);
                 requestedRef.current = false;
                 startSummarize();
                 requestedRef.current = true;
@@ -127,6 +148,23 @@ export default function AiSummary({ report }: AiSummaryProps) {
         {(state === "streaming" || state === "done") && content && (
           <div className="prose prose-slate prose-sm max-w-none text-slate-700 leading-relaxed font-medium">
             <Markdown>{content}</Markdown>
+          </div>
+        )}
+
+        {/* 完成状态下的重新分析按钮 */}
+        {state === "done" && content && (
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={() => {
+                clearCachedSummary(report.session_id);
+                requestedRef.current = false;
+                startSummarize();
+                requestedRef.current = true;
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-slate-500 bg-white/80 border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-slate-700 transition-colors cursor-pointer"
+            >
+              重新分析
+            </button>
           </div>
         )}
 

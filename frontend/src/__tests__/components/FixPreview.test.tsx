@@ -91,7 +91,7 @@ describe("FixPreview", () => {
         onDownloadComplete={vi.fn()}
       />
     );
-    expect(screen.getByText(/修复操作 \(2\)/)).toBeInTheDocument();
+    expect(screen.getByText(/自动修复操作记录/)).toBeInTheDocument();
   });
 
   it("应显示下载按钮", () => {
