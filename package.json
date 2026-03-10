@@ -8,7 +8,7 @@
   },
   "lint-staged": {
     "frontend/src/**/*.{ts,tsx}": [
-      "frontend/node_modules/.bin/eslint --config frontend/eslint.config.js"
+      "frontend/node_modules/.bin/eslint --config frontend/eslint.config.js --no-fix"
     ]
   },
   "devDependencies": {

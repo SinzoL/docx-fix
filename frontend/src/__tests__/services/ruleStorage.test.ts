@@ -525,8 +525,8 @@ describe("downloadAsYaml", () => {
 
     const mockClick = vi.fn();
     vi.spyOn(document, "createElement").mockReturnValue({
-      set href(v: string) { /* noop */ },
-      set download(v: string) { /* noop */ },
+      set href(_v: string) { /* noop */ },
+      set download(_v: string) { /* noop */ },
       click: mockClick,
     } as unknown as HTMLAnchorElement);
     vi.spyOn(document.body, "appendChild").mockImplementation((node) => node);
