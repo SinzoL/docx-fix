@@ -210,7 +210,7 @@ function App() {
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <SvgIcon name="dna" size={16} /> 提取模板
+                  <SvgIcon name="scan-extract" size={16} /> 提取模板
                 </button>
               </div>
             </div>

@@ -258,7 +258,7 @@ export default function ExtractPanel() {
           <div className="bg-white/40 p-4 sm:p-6 border-b border-slate-200/50">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-tr from-violet-500 to-purple-500 rounded-xl flex items-center justify-center text-white text-lg shadow-lg shadow-purple-500/30">
-                <SvgIcon name="dna" size={20} />
+                <SvgIcon name="scan-extract" size={20} />
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-800">
@@ -446,7 +446,7 @@ export default function ExtractPanel() {
             <div className="absolute inset-0 border-4 border-purple-100 rounded-full"></div>
             <div className="absolute inset-0 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
             <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl">
-              <SvgIcon name="dna" size={24} />
+              <SvgIcon name="scan-extract" size={24} />
             </div>
           </div>
           <h3 className="text-xl sm:text-2xl font-bold text-slate-800 font-display">
