@@ -178,7 +178,7 @@ export default function UploadPanel({
                 >
                   {/* 预置规则组 */}
                   {rules.length > 0 && (
-                    <Select.OptionGroup label={<><SvgIcon name="clipboard-list" size={14} /> 预置规则</>} divider={customRules.length > 0}>
+                    <Select.OptionGroup label="预置规则" divider={customRules.length > 0}>
                       {rules.map((rule) => (
                         <Select.Option
                           key={rule.id}
@@ -200,7 +200,7 @@ export default function UploadPanel({
                   )}
                   {/* 自定义规则组 */}
                   {customRules.length > 0 && (
-                    <Select.OptionGroup label={<><SvgIcon name="folder" size={14} /> 我的规则</>}>
+                    <Select.OptionGroup label="我的规则">
                       {customRules.map((rule) => (
                         <Select.Option
                           key={`custom:${rule.id}`}

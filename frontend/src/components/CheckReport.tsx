@@ -17,7 +17,7 @@ import type {
   CheckItemResult,
   RuleInfo,
 } from "../types";
-import { fetchRules } from "../services/api";
+import { fetchRules, recheckFile } from "../services/api";
 import RuleDetail from "./RuleDetail";
 import AiSummary from "./AiSummary";
 import AiChatPanel from "./AiChatPanel";
