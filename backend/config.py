@@ -33,6 +33,9 @@ SCRIPTS_DIR = str(BACKEND_DIR / "scripts")
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
+# 并发处理限制：同时处理的文件上传/检查/修复请求数上限
+MAX_CONCURRENT_UPLOADS = int(os.environ.get("MAX_CONCURRENT_UPLOADS", "10"))
+
 
 # ========================================
 # Session 过期时间

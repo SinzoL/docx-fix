@@ -223,15 +223,10 @@ describe("save", () => {
   it("存储空间不足时应抛出友好错误", () => {
     // Mock localStorage.setItem 抛出 QuotaExceededError
     const quotaError = new DOMException("QuotaExceededError", "QuotaExceededError");
-    const originalSetItem = localStorage.setItem.bind(localStorage);
-    let callCount = 0;
-    vi.spyOn(localStorage, "setItem").mockImplementation((key, value) => {
-      callCount++;
-      // 第一次 getAll() 内部的 _write 正常，第二次 save() 内的 _write 抛错
-      if (key === STORAGE_KEY && callCount > 1) {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation((key: string) => {
+      if (key === STORAGE_KEY) {
         throw quotaError;
       }
-      originalSetItem(key, value);
     });
 
     expect(() =>
@@ -349,7 +344,7 @@ describe("isAvailable", () => {
   });
 
   it("localStorage 不可用时应返回 false", () => {
-    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("SecurityError");
     });
     expect(isAvailable()).toBe(false);
