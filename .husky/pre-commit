@@ -1,0 +1,5 @@
+# 运行 lint-staged（对暂存的前端文件执行 ESLint）
+npx lint-staged
+
+# 运行前端 TypeScript 全量类型检查（类型检查必须全量执行，不能只检查单个文件）
+cd frontend && npx tsc --noEmit

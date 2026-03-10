@@ -1,0 +1,43 @@
+# 依赖
+node_modules/
+
+# 构建产物
+frontend/dist/
+frontend/dist-ssr/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+backend/.pytest_cache/
+backend/.ruff_cache/
+.venv/
+venv/
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 环境变量
+backend/.env
+
+# 临时文件
+*.local
