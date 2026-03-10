@@ -9,7 +9,7 @@
 
 import re
 
-from scripts.checker.base import NSMAP, W, CheckResult
+from scripts.checker.base import CheckResult
 
 
 def check_heading_styles(checker):

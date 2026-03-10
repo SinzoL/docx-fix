@@ -546,6 +546,7 @@ async def fix_file(
                 session_id=request.session_id,
                 filename=filename,
                 rule_name=resolved.name,
+                include_text_fix=request.include_text_fix,
             )
             return report
         except Exception as e:

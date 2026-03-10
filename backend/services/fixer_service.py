@@ -3,10 +3,15 @@
 
 封装现有 fixer.py 中的 DocxFixer，
 提供修复执行和修复前后对比功能。
+
+006-text-conventions: 新增文本排版修复支持，
+当 include_text_fix=True 时，在格式修复后叠加文本修复。
 """
 
 import os
 import shutil
+import logging
+import yaml
 from datetime import datetime, timezone
 
 from api.schemas import (
@@ -20,6 +25,8 @@ from api.schemas import (
 from scripts.checker import DocxChecker
 from scripts.fixer import DocxFixer
 
+logger = logging.getLogger(__name__)
+
 
 def run_fix(
     filepath: str,
@@ -27,15 +34,17 @@ def run_fix(
     session_id: str,
     filename: str,
     rule_name: str,
+    include_text_fix: bool = False,
 ) -> FixReport:
     """执行格式修复并返回修复前后对比报告。
 
     流程：
     1. 先用 checker 检查一次（修复前基线）
     2. 复制文件为 _fixed 版本
-    3. 在 _fixed 版本上运行 fixer
-    4. 再用 checker 检查修复后的文件
-    5. 对比修复前后的差异
+    3. 在 _fixed 版本上运行格式修复 (DocxFixer)
+    4. 可选：在 _fixed 版本上叠加文本修复 (text_convention_fixer)
+    5. 再用 checker 检查修复后的文件
+    6. 对比修复前后的差异
 
     Args:
         filepath: 上传文件的临时路径
@@ -43,6 +52,7 @@ def run_fix(
         session_id: 会话 ID
         filename: 原始文件名
         rule_name: 规则名称
+        include_text_fix: 是否执行文本排版修复（默认 False）
 
     Returns:
         FixReport 修复报告
@@ -62,17 +72,59 @@ def run_fix(
     fixed_path = base + "_fixed" + ext
     shutil.copy2(filepath, fixed_path)
 
-    # 3. 执行修复
+    # 3. 执行格式修复
     fixer = DocxFixer(fixed_path, rules_path)
     fixes = fixer.run_all_fixes(dry_run=False)
 
-    # 序列化修复项
+    # 序列化格式修复项
     fix_items = [
-        FixItemResult(category=cat, description=desc)
+        FixItemResult(category=cat, description=desc, fix_layer="format")
         for cat, desc in fixes
     ]
 
-    # 4. 修复后检查
+    # 4. 可选：执行文本排版修复（在格式修复后的文件上叠加）
+    if include_text_fix:
+        try:
+            from docx import Document
+            from scripts.text_convention_fixer import run_text_convention_fixes
+
+            # 读取规则
+            with open(rules_path, 'r', encoding='utf-8') as f:
+                rules = yaml.safe_load(f) or {}
+
+            # 重新打开修复后的文档
+            doc = Document(fixed_path)
+
+            # 执行文本修复
+            text_records = run_text_convention_fixes(doc, rules)
+
+            if text_records:
+                # 保存文档
+                doc.save(fixed_path)
+
+                # 添加文本修复项
+                for record in text_records:
+                    fix_items.append(
+                        FixItemResult(
+                            category=record.category,
+                            description=record.description,
+                            fix_layer="text_convention",
+                        )
+                    )
+
+                logger.info(
+                    f"文本排版修复完成: session_id={session_id}, "
+                    f"修复 {len(text_records)} 项"
+                )
+
+        except Exception as e:
+            # 文本修复失败不影响格式修复结果
+            logger.warning(
+                f"文本排版修复失败（不影响格式修复）: session_id={session_id}, "
+                f"error={e}"
+            )
+
+    # 5. 修复后检查
     checker_after = DocxChecker(fixed_path, rules_path)
     checker_after.run_all_checks()
 
@@ -91,11 +143,12 @@ def run_fix(
             message=r.message,
             location=r.location,
             fixable=r.fixable,
+            check_layer="format" if not r.category.startswith("通用·") else "text_convention",
         )
         for r in checker_after.results
     ]
 
-    # 5. 计算变化项
+    # 6. 计算变化项
     before_map = {}
     for r in checker_before.results:
         key = (r.category, r.item)

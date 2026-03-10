@@ -276,8 +276,6 @@ def check_paragraph_formatting(checker):
 
     # 汇总输出
     for key, issues in issues_by_style.items():
-        # 判断是否有 Run 直接格式覆盖（可自动修复：清除直接格式）
-        has_direct_override = any(item[2] for item in issues) if issues else False
         fixable = True  # 段落格式问题均可修复
 
         if len(issues) <= 3:

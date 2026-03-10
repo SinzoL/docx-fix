@@ -45,6 +45,13 @@ export interface RulesListResponse {
 // ========================================
 // 检查相关
 // ========================================
+
+/** LLM 审查结果 */
+export interface AiReviewResult {
+  verdict: "confirmed" | "ignored" | "uncertain";
+  reason: string;
+}
+
 export interface CheckItemResult {
   category: string;
   item: string;
@@ -52,6 +59,12 @@ export interface CheckItemResult {
   message: string;
   location: string | null;
   fixable: boolean;
+  /** 文本习惯检查项 ID（如 "tc-001"），用于异步 AI 审查匹配 */
+  id?: string;
+  /** 检查层级："format"（格式检查）| "text_convention"（文本排版习惯） */
+  check_layer?: "format" | "text_convention";
+  /** LLM 审查结果（仅争议项在审查后有） */
+  ai_review?: AiReviewResult | null;
 }
 
 export interface CheckSummary {
@@ -59,6 +72,26 @@ export interface CheckSummary {
   warn: number;
   fail: number;
   fixable: number;
+}
+
+/** 争议项（传给 AI 审查的数据） */
+export interface DisputedItem {
+  id: string;
+  rule: string;
+  paragraph_index: number;
+  paragraph_source: string;
+  text_context: string;
+  issue_description: string;
+}
+
+/** 文本习惯检查元数据 */
+export interface TextConventionMeta {
+  disputed_items: DisputedItem[];
+  document_stats: {
+    total_paragraphs: number;
+    cjk_spaced_count: number;
+    cjk_unspaced_count: number;
+  };
 }
 
 export interface CheckReport {
@@ -69,6 +102,8 @@ export interface CheckReport {
   items: CheckItemResult[];
   summary: CheckSummary;
   checked_at: string;
+  /** 文本习惯检查元数据（有争议项时存在） */
+  text_convention_meta?: TextConventionMeta | null;
 }
 
 // ========================================
@@ -77,6 +112,8 @@ export interface CheckReport {
 export interface FixItemResult {
   category: string;
   description: string;
+  /** 修复层级："format"（格式修复）| "text_convention"（文本修复） */
+  fix_layer?: "format" | "text_convention";
 }
 
 export interface ChangedItem {

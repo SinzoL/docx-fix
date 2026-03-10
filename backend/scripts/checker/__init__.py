@@ -16,6 +16,13 @@ from scripts.checker.base import (
     NSMAP,
     W,
 )
+from scripts.checker.text_convention_checker import (
+    run_text_convention_checks,
+    iter_all_paragraphs,
+    TextIssue,
+    DocumentStats,
+    ParagraphInfo,
+)
 
 __all__ = [
     'DocxChecker',
@@ -25,4 +32,9 @@ __all__ = [
     'FONT_ALIASES',
     'NSMAP',
     'W',
+    'run_text_convention_checks',
+    'iter_all_paragraphs',
+    'TextIssue',
+    'DocumentStats',
+    'ParagraphInfo',
 ]

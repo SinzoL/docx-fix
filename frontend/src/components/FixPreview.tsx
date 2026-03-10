@@ -216,29 +216,63 @@ export default function FixPreview({
         </div>
       )}
 
-      {/* 修复操作列表 */}
-      {report.fix_items.length > 0 && (
-        <div className="glass-card rounded-xl overflow-hidden border border-white/60">
-          <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-100">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <span className="w-2 h-6 bg-blue-500 rounded-full"></span>
-              自动修复操作记录 ({report.fix_items.length})
-            </h3>
-          </div>
-          <div className="divide-y divide-slate-100/50">
-            {report.fix_items.map((item, index) => (
-              <div key={index} className="px-6 py-3 flex items-start sm:items-center gap-3 hover:bg-blue-50/30 transition-colors">
-                <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold shrink-0">
-                  {item.category}
-                </span>
-                <span className="text-sm font-medium text-slate-600">
-                  {item.description}
-                </span>
+      {/* 修复操作列表（按 fix_layer 分组） */}
+      {report.fix_items.length > 0 && (() => {
+        const formatFixItems = report.fix_items.filter(i => (i.fix_layer ?? "format") === "format");
+        const textFixItems = report.fix_items.filter(i => i.fix_layer === "text_convention");
+
+        return (
+          <>
+            {/* 格式修复操作 */}
+            {formatFixItems.length > 0 && (
+              <div className="glass-card rounded-xl overflow-hidden border border-white/60">
+                <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-100">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <span className="w-2 h-6 bg-blue-500 rounded-full"></span>
+                    格式修复操作 ({formatFixItems.length})
+                  </h3>
+                </div>
+                <div className="divide-y divide-slate-100/50">
+                  {formatFixItems.map((item, index) => (
+                    <div key={index} className="px-6 py-3 flex items-start sm:items-center gap-3 hover:bg-blue-50/30 transition-colors">
+                      <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold shrink-0">
+                        {item.category}
+                      </span>
+                      <span className="text-sm font-medium text-slate-600">
+                        {item.description}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+
+            {/* 文本排版修复操作 */}
+            {textFixItems.length > 0 && (
+              <div className="glass-card rounded-xl overflow-hidden border border-white/60">
+                <div className="px-6 py-4 bg-violet-50/80 border-b border-violet-100">
+                  <h3 className="font-bold text-violet-800 flex items-center gap-2">
+                    <span className="w-2 h-6 bg-violet-500 rounded-full"></span>
+                    文本排版修复 ({textFixItems.length})
+                  </h3>
+                </div>
+                <div className="divide-y divide-violet-100/50">
+                  {textFixItems.map((item, index) => (
+                    <div key={index} className="px-6 py-3 flex items-start sm:items-center gap-3 hover:bg-violet-50/30 transition-colors">
+                      <span className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-100 rounded-lg text-xs font-bold shrink-0">
+                        {item.category}
+                      </span>
+                      <span className="text-sm font-medium text-slate-600">
+                        {item.description}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* #1: 修复后完整检查报告（可展开/收起） */}
       {(report.after_items ?? []).length > 0 && (

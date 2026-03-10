@@ -325,6 +325,12 @@ class DocxChecker:
         # 编号缩进检查（numbering_checker.py）
         check_heading_numbering_indent(self)
 
+        # 文本排版习惯检查（text_convention_checker.py）
+        from scripts.checker.text_convention_checker import run_text_convention_checks
+        self._text_issues, self._text_stats = run_text_convention_checks(
+            self, self.doc, self.rules
+        )
+
         return self.results
 
     def print_report(self):

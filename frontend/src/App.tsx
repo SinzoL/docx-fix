@@ -89,14 +89,15 @@ function App() {
   }, []);
 
   // 一键修复（#5: 增加防抖保护，fixLoading 为 true 时忽略重复调用）
-  const handleFix = useCallback(async () => {
+  // 006-text-conventions: 接受 includeTextFix 参数，控制是否同时修复文本排版问题
+  const handleFix = useCallback(async (includeTextFix?: boolean) => {
     if (!sessionId || !selectedRuleId || fixLoading) return;
 
     setFixLoading(true);
     setAppState("FIXING");
 
     try {
-      const report = await fixFile(sessionId, selectedRuleId, customRulesYaml);
+      const report = await fixFile(sessionId, selectedRuleId, customRulesYaml, includeTextFix);
       setFixReport(report);
       setAppState("FIX_PREVIEW");
 

@@ -62,6 +62,12 @@ class RulesListResponse(BaseModel):
 # 检查相关
 # ========================================
 
+class AiReviewResult(BaseModel):
+    """LLM 审查结果"""
+    verdict: str  # "confirmed" | "ignored" | "uncertain"
+    reason: str = ""
+
+
 class CheckItemResult(BaseModel):
     """单条检查结果"""
     category: str
@@ -70,6 +76,10 @@ class CheckItemResult(BaseModel):
     message: str
     location: Optional[str] = None
     fixable: bool = False
+    # 006-text-conventions 新增
+    id: Optional[str] = None  # 文本习惯检查项 ID（如 "tc-001"），用于异步 AI 审查匹配
+    check_layer: str = "format"  # "format" | "text_convention"
+    ai_review: Optional[AiReviewResult] = None  # LLM 审查结果（仅争议项在审查后有）
 
 
 class CheckSummary(BaseModel):
@@ -84,6 +94,22 @@ class CheckSummary(BaseModel):
         populate_by_name = True
 
 
+class DisputedItem(BaseModel):
+    """争议项（传给 LLM 审查的数据）"""
+    id: str
+    rule: str
+    paragraph_index: int
+    paragraph_source: str
+    text_context: str
+    issue_description: str
+
+
+class TextConventionMeta(BaseModel):
+    """文本习惯检查元数据"""
+    disputed_items: list[DisputedItem] = []
+    document_stats: dict = {}  # {total_paragraphs, cjk_spaced_count, cjk_unspaced_count}
+
+
 class CheckReport(BaseModel):
     """POST /api/check 响应 — 完整检查报告"""
     session_id: str
@@ -93,6 +119,8 @@ class CheckReport(BaseModel):
     items: list[CheckItemResult]
     summary: CheckSummary
     checked_at: str
+    # 006-text-conventions 新增
+    text_convention_meta: Optional[TextConventionMeta] = None
 
 
 # ========================================
@@ -111,12 +139,14 @@ class FixRequest(BaseModel):
     session_id: str
     rule_id: str
     custom_rules_yaml: Optional[str] = None
+    include_text_fix: bool = False  # 是否执行文本排版修复（默认关闭）
 
 
 class FixItemResult(BaseModel):
     """单条修复结果"""
     category: str
     description: str
+    fix_layer: str = "format"  # "format" | "text_convention"
 
 
 class ChangedItem(BaseModel):
@@ -191,6 +221,39 @@ class AiGenerateRulesResponse(BaseModel):
     """POST /api/ai/generate-rules 响应"""
     yaml_content: str  # 生成的 YAML 内容
     warnings: list[str] = []  # 推断项提醒
+
+
+# ========================================
+# AI 文本排版争议审查
+# ========================================
+
+class AiReviewDisputedItem(BaseModel):
+    """争议审查请求中的单个争议项"""
+    id: str
+    rule: str
+    paragraph_index: int
+    paragraph_source: str = "body"
+    text_context: str
+    issue_description: str
+
+
+class AiReviewConventionsRequest(BaseModel):
+    """POST /api/ai/review-conventions 请求体"""
+    session_id: str = ""
+    disputed_items: list[AiReviewDisputedItem]
+    document_stats: dict = {}  # {total_paragraphs, cjk_spaced_count, cjk_unspaced_count}
+
+
+class AiReviewItemResult(BaseModel):
+    """单个争议项的审查结果"""
+    id: str
+    verdict: str  # "confirmed" | "ignored" | "uncertain"
+    reason: str = ""
+
+
+class AiReviewConventionsResponse(BaseModel):
+    """POST /api/ai/review-conventions 响应"""
+    reviews: list[AiReviewItemResult]
 
 
 # ========================================

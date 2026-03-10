@@ -230,3 +230,87 @@ def build_generate_rules_messages(
         {"role": "system", "content": GENERATE_RULES_SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+# ============================================================
+# 4. 文本排版争议审查
+# ============================================================
+
+REVIEW_CONVENTIONS_SYSTEM_PROMPT = """你是一个中文学术文档排版规范审查专家。你的任务是对排版检查系统标记的"争议项"进行二次审查。
+
+每个争议项都是规则引擎检出的疑似排版问题，但确定性不足，需要你基于上下文判断：
+- **confirmed（确认问题）**：该位置确实存在排版不规范，建议修正
+- **ignored（可忽略）**：该位置的用法是合理的，属于以下常见例外之一
+- **uncertain（不确定）**：无法确定，建议人工复核
+
+**常见的合理例外（应判为 ignored）**：
+1. 代码引用中的英文标点：如 `print("hello")`、`for i in range(10)` — 代码中使用半角标点是正确的
+2. 公式和数学表达式中的英文标点：如 `f(x) = x + 1`
+3. URL、文件路径、邮箱地址中的标点
+4. 参考文献编号和引用标记：如 `[1]`、`(2021)`
+5. 列表/标题类段落末尾不需要句号：如 `1. 实验环境`、`第三章 实验结果`
+6. 英文缩写和专有名词中的标点：如 `C++`、`e.g.`、`vs.`
+7. 文档中统一使用中英文不加空格的风格（两种风格都可接受，重要的是一致性）
+
+**中英文间距判断依据**：
+- 文档统计数据中会提供 cjk_spaced_count 和 cjk_unspaced_count
+- 如果大多数位置有空格，少数位置没有 → 少数派应 confirmed
+- 如果大多数位置没有空格，少数位置有 → 少数派应 confirmed
+- 如果两种风格数量接近 → uncertain
+
+输出格式要求：
+- 必须对每个争议项给出判断
+- reason 字段用简洁中文解释判断依据（1-2 句话）
+- 严格按照 JSON 格式输出，不要添加额外说明
+
+输出 JSON 格式：
+```json
+[
+  {"id": "tc-001", "verdict": "confirmed", "reason": "..."},
+  {"id": "tc-002", "verdict": "ignored", "reason": "..."}
+]
+```"""
+
+
+def build_review_conventions_messages(
+    disputed_items: list[dict],
+    document_stats: dict,
+) -> list[dict]:
+    """构建文本排版争议审查的消息列表。
+
+    Args:
+        disputed_items: 争议项列表 [{"id", "rule", "paragraph_index", "text_context", "issue_description"}]
+        document_stats: 文档统计 {"total_paragraphs", "cjk_spaced_count", "cjk_unspaced_count"}
+
+    Returns:
+        OpenAI 格式的 messages 列表
+    """
+    # 构建争议项描述
+    items_text = ""
+    for item in disputed_items:
+        items_text += f"""
+- ID: {item["id"]}
+  规则: {item["rule"]}
+  段落位置: 第{item["paragraph_index"] + 1}段 ({item.get("paragraph_source", "body")})
+  上下文: "{item["text_context"]}"
+  问题描述: {item["issue_description"]}
+"""
+
+    stats_text = f"""文档统计：
+- 总段落数: {document_stats.get("total_paragraphs", 0)}
+- 中英交界有空格: {document_stats.get("cjk_spaced_count", 0)} 处
+- 中英交界无空格: {document_stats.get("cjk_unspaced_count", 0)} 处"""
+
+    user_content = f"""请审查以下排版争议项，对每项给出 confirmed/ignored/uncertain 判断。
+
+{stats_text}
+
+争议项列表：
+{items_text}
+
+请以 JSON 数组格式输出审查结果。"""
+
+    return [
+        {"role": "system", "content": REVIEW_CONVENTIONS_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]

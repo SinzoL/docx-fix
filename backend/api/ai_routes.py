@@ -5,10 +5,12 @@ AI 相关 API 路由
 - POST /api/ai/summarize  — 检查报告 AI 总结（SSE 流式）
 - POST /api/ai/chat       — 格式问答（SSE 流式）
 - POST /api/ai/generate-rules — 从文本生成 YAML 规则（JSON）
+- POST /api/ai/review-conventions — 文本排版争议审查（JSON）
 """
 
 import json
 import logging
+import asyncio
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -18,6 +20,9 @@ from api.schemas import (
     AiChatRequest,
     AiGenerateRulesRequest,
     AiGenerateRulesResponse,
+    AiReviewConventionsRequest,
+    AiReviewConventionsResponse,
+    AiReviewItemResult,
     ErrorResponse,
 )
 from services import llm_service
@@ -25,6 +30,7 @@ from services.ai_prompts import (
     build_summarize_messages,
     build_chat_messages,
     build_generate_rules_messages,
+    build_review_conventions_messages,
 )
 
 logger = logging.getLogger(__name__)
@@ -194,3 +200,129 @@ async def generate_rules(request: AiGenerateRulesRequest):
                 message=f"AI 规则生成失败: {str(e)}"
             ).model_dump(),
         )
+
+
+# ========================================
+# POST /api/ai/review-conventions — 文本排版争议审查（JSON）
+# ========================================
+@ai_router.post("/review-conventions", response_model=AiReviewConventionsResponse)
+async def review_conventions(request: AiReviewConventionsRequest):
+    """对文本排版检查的争议项进行 LLM 二次审查。
+
+    batch 模式：将多个争议项合并为一次 LLM 调用。
+    15 秒超时保护：超时则所有争议项降级为 uncertain。
+    """
+    if not request.disputed_items:
+        return AiReviewConventionsResponse(reviews=[])
+
+    # 检查 LLM 是否可用（不可用时降级为 uncertain）
+    if not llm_service.is_available():
+        return AiReviewConventionsResponse(
+            reviews=[
+                AiReviewItemResult(
+                    id=item.id,
+                    verdict="uncertain",
+                    reason="AI 审查不可用，请人工判断",
+                )
+                for item in request.disputed_items
+            ]
+        )
+
+    messages = build_review_conventions_messages(
+        disputed_items=[item.model_dump() for item in request.disputed_items],
+        document_stats=request.document_stats,
+    )
+
+    try:
+        # 15 秒超时保护
+        raw_response = await asyncio.wait_for(
+            llm_service.chat_completion(
+                messages=messages,
+                max_tokens=2048,
+                temperature=0.1,  # 低温度确保判断一致性
+            ),
+            timeout=15.0,
+        )
+
+        # 解析 LLM 响应
+        reviews = _parse_review_response(raw_response, request.disputed_items)
+        return AiReviewConventionsResponse(reviews=reviews)
+
+    except asyncio.TimeoutError:
+        logger.warning("AI 争议审查超时 (>15s)，降级为 uncertain")
+        return AiReviewConventionsResponse(
+            reviews=[
+                AiReviewItemResult(
+                    id=item.id,
+                    verdict="uncertain",
+                    reason="AI 审查超时，请人工判断",
+                )
+                for item in request.disputed_items
+            ]
+        )
+
+    except Exception as e:
+        logger.error(f"AI 争议审查失败: {e}")
+        return AiReviewConventionsResponse(
+            reviews=[
+                AiReviewItemResult(
+                    id=item.id,
+                    verdict="uncertain",
+                    reason=f"AI 审查出错: {str(e)[:50]}",
+                )
+                for item in request.disputed_items
+            ]
+        )
+
+
+def _parse_review_response(
+    raw_response: str,
+    disputed_items: list,
+) -> list[AiReviewItemResult]:
+    """解析 LLM 审查响应，提取结构化结果。
+
+    容错处理：如果 LLM 输出格式异常，为未覆盖的项返回 uncertain。
+    """
+    # 清理 markdown 代码块标记
+    text = raw_response.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+
+    valid_verdicts = {"confirmed", "ignored", "uncertain"}
+    result_map: dict[str, AiReviewItemResult] = {}
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            for entry in parsed:
+                if isinstance(entry, dict) and "id" in entry:
+                    verdict = entry.get("verdict", "uncertain")
+                    if verdict not in valid_verdicts:
+                        verdict = "uncertain"
+                    result_map[entry["id"]] = AiReviewItemResult(
+                        id=entry["id"],
+                        verdict=verdict,
+                        reason=entry.get("reason", ""),
+                    )
+    except (json.JSONDecodeError, TypeError):
+        logger.warning(f"LLM 审查响应格式异常: {text[:200]}")
+
+    # 确保所有争议项都有结果
+    reviews = []
+    for item in disputed_items:
+        item_id = item.id if hasattr(item, 'id') else item.get('id', '')
+        if item_id in result_map:
+            reviews.append(result_map[item_id])
+        else:
+            reviews.append(AiReviewItemResult(
+                id=item_id,
+                verdict="uncertain",
+                reason="AI 未返回该项的审查结果",
+            ))
+
+    return reviews

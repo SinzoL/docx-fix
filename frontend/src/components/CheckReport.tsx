@@ -2,24 +2,27 @@
  * 检查报告组件
  *
  * 功能：
- * - 按类别分组展示检查项
+ * - 按类别分组展示检查项（分为"格式检查"和"通用排版习惯"两大区域）
  * - 显示 PASS/WARN/FAIL 状态标签
- * - 显示汇总统计（通过/警告/失败/可修复）
- * - 一键修复按钮（有可修复项时启用）
+ * - 显示汇总统计（通过/警告/失败/可修复，分层统计）
+ * - 一键修复按钮（有可修复项时启用）+ 文本修复开关
  * - 切换规则重新检查（包括自定义规则）
  * - 查看规则详情
+ * - AI 审查标签（confirmed/ignored/uncertain）
+ * - 异步 AI 审查加载态
  * - #13: 历史报告只读模式
  */
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Select, Drawer, MessagePlugin } from "tdesign-react";
 import type {
   CheckReport as CheckReportType,
   CheckItemResult,
   RuleInfo,
   CustomRule,
+  AiReviewResult,
 } from "../types";
-import { fetchRules, recheckFile } from "../services/api";
+import { fetchRules, recheckFile, reviewConventions } from "../services/api";
 import { getAll as getAllCustomRules } from "../services/ruleStorage";
 import RuleDetail from "./RuleDetail";
 import AiSummary from "./AiSummary";
@@ -28,7 +31,7 @@ import { SvgIcon } from "./icons/SvgIcon";
 
 interface CheckReportProps {
   report: CheckReportType;
-  onFix: () => void;
+  onFix: (includeTextFix?: boolean) => void;
   fixLoading: boolean;
   sessionId?: string;
   onRecheck?: (report: CheckReportType) => void;
@@ -47,6 +50,13 @@ const STATUS_CONFIG = {
   FAIL: { color: "danger" as const, icon: "x-circle", label: "失败" },
 };
 
+// AI 审查标签样式
+const AI_VERDICT_CONFIG = {
+  confirmed: { label: "AI 确认 ✓", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  ignored: { label: "AI 可忽略 ○", className: "bg-slate-100 text-slate-500 border-slate-200" },
+  uncertain: { label: "待确认 ?", className: "bg-amber-100 text-amber-700 border-amber-200" },
+};
+
 export default function CheckReportView({
   report,
   onFix,
@@ -62,6 +72,12 @@ export default function CheckReportView({
   const [recheckLoading, setRecheckLoading] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
+  const [includeTextFix, setIncludeTextFix] = useState(false);
+
+  // AI 审查状态
+  const [aiReviewLoading, setAiReviewLoading] = useState(false);
+  const [aiReviews, setAiReviews] = useState<Record<string, AiReviewResult>>({});
+  const [expandedAiReason, setExpandedAiReason] = useState<string | null>(null);
 
   // #2 #16: 加载规则列表（服务端 + 本地自定义）
   useEffect(() => {
@@ -71,6 +87,32 @@ export default function CheckReportView({
     setCustomRules(getAllCustomRules());
   }, []);
 
+  // 自动发起 AI 审查
+  useEffect(() => {
+    const meta = report.text_convention_meta;
+    if (!meta || meta.disputed_items.length === 0 || !sessionId) return;
+
+    setAiReviewLoading(true);
+    reviewConventions(
+      sessionId,
+      meta.disputed_items,
+      meta.document_stats,
+    )
+      .then((res) => {
+        const reviewMap: Record<string, AiReviewResult> = {};
+        for (const r of res.reviews) {
+          reviewMap[r.id] = { verdict: r.verdict, reason: r.reason };
+        }
+        setAiReviews(reviewMap);
+      })
+      .catch(() => {
+        // AI 审查失败，不影响其他功能
+      })
+      .finally(() => {
+        setAiReviewLoading(false);
+      });
+  }, [report.text_convention_meta, sessionId]);
+
   // #2: 切换规则重新检查（支持自定义规则）
   const handleRuleSwitch = async (ruleId: string) => {
     setSelectedRuleId(ruleId as string);
@@ -78,7 +120,6 @@ export default function CheckReportView({
 
     setRecheckLoading(true);
     try {
-      // 判断是否选择了自定义规则
       const customRule = customRules.find((r) => `custom:${r.id}` === ruleId);
       let newReport: CheckReportType;
       let newCustomYaml: string | undefined;
@@ -93,6 +134,7 @@ export default function CheckReportView({
 
       onRecheck(newReport);
       onCustomRulesYamlChange?.(newCustomYaml);
+      setAiReviews({});  // 清空旧审查结果
 
       const displayName = customRule
         ? customRule.name
@@ -106,52 +148,208 @@ export default function CheckReportView({
     }
   };
 
-  // 按类别分组
-  const groupedItems = useMemo(() => {
-    const groups: Record<string, CheckItemResult[]> = {};
+  // 分层分组：格式检查 vs 文本排版习惯
+  const { formatItems, textConventionItems, formatGroups, tcGroups } = useMemo(() => {
+    const fItems: CheckItemResult[] = [];
+    const tcItems: CheckItemResult[] = [];
+
     for (const item of report.items) {
-      if (!groups[item.category]) {
-        groups[item.category] = [];
+      if (item.check_layer === "text_convention") {
+        tcItems.push(item);
+      } else {
+        fItems.push(item);
       }
-      groups[item.category].push(item);
     }
-    return groups;
+
+    const fGroups: Record<string, CheckItemResult[]> = {};
+    for (const item of fItems) {
+      if (!fGroups[item.category]) fGroups[item.category] = [];
+      fGroups[item.category].push(item);
+    }
+
+    const tGroups: Record<string, CheckItemResult[]> = {};
+    for (const item of tcItems) {
+      if (!tGroups[item.category]) tGroups[item.category] = [];
+      tGroups[item.category].push(item);
+    }
+
+    return { formatItems: fItems, textConventionItems: tcItems, formatGroups: fGroups, tcGroups: tGroups };
   }, [report.items]);
 
-  const categories = Object.keys(groupedItems);
+  const formatCategories = Object.keys(formatGroups);
+  const tcCategories = Object.keys(tcGroups);
   const hasFixable = report.summary.fixable > 0;
   const allPass = report.summary.fail === 0 && report.summary.warn === 0;
 
+  // 分层统计
+  const formatStats = useMemo(() => ({
+    pass: formatItems.filter(i => i.status === "PASS").length,
+    warn: formatItems.filter(i => i.status === "WARN").length,
+    fail: formatItems.filter(i => i.status === "FAIL").length,
+  }), [formatItems]);
+
+  const tcStats = useMemo(() => ({
+    pass: textConventionItems.filter(i => i.status === "PASS").length,
+    warn: textConventionItems.filter(i => i.status === "WARN").length,
+    fail: textConventionItems.filter(i => i.status === "FAIL").length,
+  }), [textConventionItems]);
+
   // 折叠状态
+  const allCategories = [...formatCategories, ...tcCategories];
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
-    for (const cat of categories) {
-      const hasIssues = groupedItems[cat].some(i => i.status !== 'PASS');
+    const allGroups = { ...formatGroups, ...tcGroups };
+    for (const cat of allCategories) {
+      const hasIssues = allGroups[cat]?.some(i => i.status !== 'PASS');
       init[cat] = !hasIssues;
     }
     return init;
   });
-
-  const someCollapsed = categories.some(cat => collapsed[cat]);
+  const [formatSectionCollapsed, setFormatSectionCollapsed] = useState(false);
+  const [tcSectionCollapsed, setTcSectionCollapsed] = useState(false);
 
   const toggleCategory = (cat: string) => {
     setCollapsed(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
-  const expandAll = () => {
-    const next: Record<string, boolean> = {};
-    for (const cat of categories) next[cat] = false;
-    setCollapsed(next);
-  };
+  // 获取合并后的 AI 审查结果
+  const getAiReview = useCallback((item: CheckItemResult): AiReviewResult | null => {
+    if (item.ai_review) return item.ai_review;
+    if (item.id && aiReviews[item.id]) return aiReviews[item.id];
+    return null;
+  }, [aiReviews]);
 
-  const collapseAll = () => {
-    const next: Record<string, boolean> = {};
-    for (const cat of categories) next[cat] = true;
-    setCollapsed(next);
-  };
-
-  // 规则列表合计（用于判断是否显示切换区域）
+  // 规则列表合计
   const totalRules = rules.length + customRules.length;
+
+  // 渲染单个检查项
+  const renderCheckItem = (item: CheckItemResult, index: number) => {
+    const config = STATUS_CONFIG[item.status];
+    const review = getAiReview(item);
+    const isExpanded = expandedAiReason === item.id;
+
+    return (
+      <div
+        key={`${item.item}-${index}`}
+        className="px-6 py-4 flex flex-col sm:flex-row items-start gap-4 hover:bg-blue-50/30 transition-colors"
+      >
+        <span className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
+          item.status === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+          item.status === 'WARN' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+          'bg-rose-50 text-rose-700 border-rose-200'
+        }`}>
+          <SvgIcon name={config.icon} size={14} /> {config.label}
+        </span>
+
+        <div className="flex-1 min-w-0 pt-0.5">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <span className="font-bold text-slate-800 text-sm">
+              {item.item}
+            </span>
+            {item.fixable && (
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider">
+                支持自动修复
+              </span>
+            )}
+            {/* AI 审查标签 */}
+            {item.id && aiReviewLoading && !review && (
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[10px] font-bold flex items-center gap-1">
+                <span className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                AI 审查中...
+              </span>
+            )}
+            {review && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedAiReason(isExpanded ? null : (item.id ?? null));
+                }}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border cursor-pointer transition-all hover:opacity-80 ${
+                  AI_VERDICT_CONFIG[review.verdict]?.className ?? AI_VERDICT_CONFIG.uncertain.className
+                }`}
+              >
+                {AI_VERDICT_CONFIG[review.verdict]?.label ?? "待确认 ?"}
+              </button>
+            )}
+          </div>
+          <p className={`text-sm break-all ${
+            item.status === 'FAIL' ? 'text-rose-600 font-medium' :
+            item.status === 'WARN' ? 'text-amber-700' :
+            'text-slate-500'
+          }`}>
+            {item.message}
+          </p>
+          {/* AI 审查理由展开 */}
+          {review && isExpanded && review.reason && (
+            <div className="mt-2 p-2.5 bg-blue-50/50 border border-blue-100 rounded-lg text-xs text-blue-800">
+              <span className="font-semibold">AI 分析：</span> {review.reason}
+            </div>
+          )}
+          {item.location && (
+            <div className="flex items-center gap-1 mt-2">
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs font-medium font-mono flex items-center gap-1">
+                <SvgIcon name="map-pin" size={12} /> {item.location}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染分组
+  const renderCategoryGroup = (category: string, items: CheckItemResult[]) => {
+    const categoryFails = items.filter((i) => i.status === "FAIL").length;
+    const categoryWarns = items.filter((i) => i.status === "WARN").length;
+    const categoryPasses = items.filter((i) => i.status === "PASS").length;
+    const isCollapsed = collapsed[category] ?? false;
+
+    return (
+      <div
+        key={category}
+        className="glass-card rounded-xl overflow-hidden border border-white/60 transition-all hover:border-blue-200"
+      >
+        <div
+          data-testid="category-header"
+          onClick={() => toggleCategory(category)}
+          className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 cursor-pointer select-none hover:bg-slate-100/80 transition-colors"
+        >
+          <h3 className="font-bold text-slate-800 flex items-center gap-2">
+            <span className="text-slate-400 transition-transform" style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
+              <SvgIcon name="chevron-right" size={16} />
+            </span>
+            {category}
+          </h3>
+          <div className="flex gap-2 text-sm font-bold">
+            {categoryPasses > 0 && (
+              <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg">
+                {categoryPasses} 项通过
+              </span>
+            )}
+            {categoryWarns > 0 && (
+              <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg">
+                {categoryWarns} 项警告
+              </span>
+            )}
+            {categoryFails > 0 && (
+              <span className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg">
+                {categoryFails} 项失败
+              </span>
+            )}
+            {categoryFails === 0 && categoryWarns === 0 && (
+              <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg">
+                完美通过
+              </span>
+            )}
+          </div>
+        </div>
+
+        {!isCollapsed && <div className="divide-y divide-slate-100/50">
+          {items.map((item, index) => renderCheckItem(item, index))}
+        </div>}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -178,7 +376,6 @@ export default function CheckReportView({
             <p className="text-sm font-medium text-slate-500 mt-2 flex items-center gap-2">
               <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{report.filename}</span> 
               <span>·</span> 
-              {/* #11: 统一术语为"检查标准" */}
               <span>检查标准：<span className="text-blue-600">{report.rule_name}</span></span>
             </p>
           </div>
@@ -200,7 +397,7 @@ export default function CheckReportView({
               <span className="text-base"><SvgIcon name="clipboard-list" size={16} /></span> 规则详情
             </button>
 
-            {/* #14: 全部通过时显示完美文档标签，无可修复项时隐藏按钮 */}
+            {/* 修复按钮 */}
             {allPass ? (
               <span className="px-6 py-2.5 text-sm font-bold rounded-xl bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-2">
                 <SvgIcon name="check" size={16} /> 完美文档
@@ -208,7 +405,7 @@ export default function CheckReportView({
             ) : hasFixable && !readOnly ? (
               <button
                 disabled={fixLoading}
-                onClick={onFix}
+                onClick={() => onFix(includeTextFix)}
                 className={`px-6 py-2.5 text-sm font-bold rounded-xl flex items-center gap-2 transition-all shadow-md ${
                   fixLoading
                     ? "bg-blue-400 text-white cursor-wait shadow-none"
@@ -228,7 +425,23 @@ export default function CheckReportView({
           </div>
         </div>
 
-        {/* #2 #11 #13: 规则切换（含自定义规则，只读模式下禁用） */}
+        {/* 文本修复开关（仅在有文本排版问题时显示） */}
+        {textConventionItems.length > 0 && hasFixable && !readOnly && (
+          <div className="mb-4 flex items-center gap-3 p-3 bg-violet-50/50 rounded-xl border border-violet-100">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeTextFix}
+                onChange={(e) => setIncludeTextFix(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              <span className="text-sm font-medium text-slate-700">同时修复文本排版问题</span>
+            </label>
+            <span className="text-xs text-slate-500">（连续标点、多余空格等，默认仅修复格式）</span>
+          </div>
+        )}
+
+        {/* 规则切换 */}
         {totalRules > 1 && !readOnly && (
           <div className="mb-6 flex items-center gap-3 p-3 bg-slate-50/50 rounded-xl border border-slate-100">
             <span className="text-sm font-medium text-slate-600 shrink-0">切换检查标准：</span>
@@ -240,7 +453,6 @@ export default function CheckReportView({
               size="small"
               className="!border-white shadow-sm"
             >
-              {/* 预置规则 */}
               {rules.length > 0 && (
                 <Select.OptionGroup label="预置标准" divider={customRules.length > 0}>
                   {rules.map((rule) => (
@@ -250,7 +462,6 @@ export default function CheckReportView({
                   ))}
                 </Select.OptionGroup>
               )}
-              {/* #2: 自定义规则 */}
               {customRules.length > 0 && (
                 <Select.OptionGroup label="我的规则">
                   {customRules.map((rule) => (
@@ -279,7 +490,7 @@ export default function CheckReportView({
           </div>
         )}
 
-        {/* 统计数据 */}
+        {/* 统计数据（分层） */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
           <div className="bg-emerald-50/80 border border-emerald-100 rounded-xl p-5 text-center group hover:bg-emerald-100 transition-colors">
             <div className="text-3xl font-black text-emerald-600 font-display group-hover:scale-110 transition-transform">
@@ -307,118 +518,69 @@ export default function CheckReportView({
             <div className="text-sm font-bold text-blue-800 mt-1 uppercase tracking-wider relative z-10">可一键修复</div>
           </div>
         </div>
+
+        {/* 分层统计摘要 */}
+        {textConventionItems.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold relative z-10">
+            <span className="px-3 py-1.5 bg-white/80 border border-slate-200 rounded-lg text-slate-600">
+              格式: ✓{formatStats.pass} ⚠{formatStats.warn} ✗{formatStats.fail}
+            </span>
+            <span className="px-3 py-1.5 bg-violet-50 border border-violet-200 rounded-lg text-violet-700">
+              排版习惯: ✓{tcStats.pass} ⚠{tcStats.warn} ✗{tcStats.fail}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* 按类别分组的详细报告 */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between px-2 pt-2">
-          <h3 className="text-lg font-bold text-slate-800 font-display">具体检查项详情</h3>
-          <button
-            onClick={someCollapsed ? expandAll : collapseAll}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <SvgIcon name={someCollapsed ? 'expand' : 'collapse'} size={14} />
-            {someCollapsed ? '展开全部' : '收起全部'}
-          </button>
-        </div>
-        
-        {categories.map((category) => {
-          const items = groupedItems[category];
-          const categoryFails = items.filter((i) => i.status === "FAIL").length;
-          const categoryWarns = items.filter((i) => i.status === "WARN").length;
-          const categoryPasses = items.filter((i) => i.status === "PASS").length;
-          const isCollapsed = collapsed[category] ?? false;
-
-          return (
-            <div
-              key={category}
-              className="glass-card rounded-xl overflow-hidden border border-white/60 transition-all hover:border-blue-200"
+      {/* 格式检查区域 */}
+      {formatCategories.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2 pt-2">
+            <button
+              onClick={() => setFormatSectionCollapsed(!formatSectionCollapsed)}
+              className="text-lg font-bold text-slate-800 font-display flex items-center gap-2 cursor-pointer hover:text-blue-600 transition-colors"
             >
-              <div
-                data-testid="category-header"
-                onClick={() => toggleCategory(category)}
-                className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 cursor-pointer select-none hover:bg-slate-100/80 transition-colors"
-              >
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <span className="text-slate-400 transition-transform" style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
-                    <SvgIcon name="chevron-right" size={16} />
-                  </span>
-                  {category}
-                </h3>
-                <div className="flex gap-2 text-sm font-bold">
-                  {categoryPasses > 0 && (
-                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg">
-                      {categoryPasses} 项通过
-                    </span>
-                  )}
-                  {categoryWarns > 0 && (
-                    <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg">
-                      {categoryWarns} 项警告
-                    </span>
-                  )}
-                  {categoryFails > 0 && (
-                    <span className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-lg">
-                      {categoryFails} 项失败
-                    </span>
-                  )}
-                  {categoryFails === 0 && categoryWarns === 0 && (
-                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg">
-                      完美通过
-                    </span>
-                  )}
-                </div>
-              </div>
+              <span className="text-slate-400 transition-transform" style={{ transform: formatSectionCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
+                <SvgIcon name="chevron-right" size={16} />
+              </span>
+              格式检查
+              <span className="text-sm font-semibold text-slate-500">({formatItems.length})</span>
+            </button>
+          </div>
+          
+          {!formatSectionCollapsed && formatCategories.map((category) =>
+            renderCategoryGroup(category, formatGroups[category])
+          )}
+        </div>
+      )}
 
-              {!isCollapsed && <div className="divide-y divide-slate-100/50">
-                {items.map((item, index) => {
-                  const config = STATUS_CONFIG[item.status];
-                  return (
-                    <div
-                      key={`${item.item}-${index}`}
-                      className="px-6 py-4 flex flex-col sm:flex-row items-start gap-4 hover:bg-blue-50/30 transition-colors"
-                    >
-                      <span className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
-                        item.status === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                        item.status === 'WARN' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                        'bg-rose-50 text-rose-700 border-rose-200'
-                      }`}>
-                        <SvgIcon name={config.icon} size={14} /> {config.label}
-                      </span>
-
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <span className="font-bold text-slate-800 text-sm">
-                            {item.item}
-                          </span>
-                          {item.fixable && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider">
-                              支持自动修复
-                            </span>
-                          )}
-                        </div>
-                        <p className={`text-sm break-all ${
-                          item.status === 'FAIL' ? 'text-rose-600 font-medium' :
-                          item.status === 'WARN' ? 'text-amber-700' :
-                          'text-slate-500'
-                        }`}>
-                          {item.message}
-                        </p>
-                        {item.location && (
-                          <div className="flex items-center gap-1 mt-2">
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs font-medium font-mono flex items-center gap-1">
-                              <SvgIcon name="map-pin" size={12} /> {item.location}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>}
-            </div>
-          );
-        })}
-      </div>
+      {/* 通用排版习惯区域 */}
+      {tcCategories.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2 pt-2">
+            <button
+              onClick={() => setTcSectionCollapsed(!tcSectionCollapsed)}
+              className="text-lg font-bold text-violet-800 font-display flex items-center gap-2 cursor-pointer hover:text-violet-600 transition-colors"
+            >
+              <span className="text-violet-400 transition-transform" style={{ transform: tcSectionCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
+                <SvgIcon name="chevron-right" size={16} />
+              </span>
+              通用排版习惯
+              <span className="text-sm font-semibold text-violet-500">({textConventionItems.length})</span>
+              {aiReviewLoading && (
+                <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] font-bold flex items-center gap-1">
+                  <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                  AI 审查中...
+                </span>
+              )}
+            </button>
+          </div>
+          
+          {!tcSectionCollapsed && tcCategories.map((category) =>
+            renderCategoryGroup(category, tcGroups[category])
+          )}
+        </div>
+      )}
       
       {/* 规则详情抽屉 */}
       <Drawer

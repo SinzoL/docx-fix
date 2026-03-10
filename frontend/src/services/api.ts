@@ -12,6 +12,7 @@ import type {
   ErrorResponse,
   ExtractResult,
   AiGenerateRulesResponse,
+  DisputedItem,
 } from "../types";
 
 const API_BASE = "/api";
@@ -133,18 +134,23 @@ export async function recheckFile(
  * POST /api/fix — 执行修复并返回预览
  *
  * 当 customRulesYaml 非空时，使用自定义规则 YAML 内容进行修复。
+ * 当 includeTextFix 为 true 时，同时修复文本排版问题。
  */
 export async function fixFile(
   sessionId: string,
   ruleId: string,
-  customRulesYaml?: string
+  customRulesYaml?: string,
+  includeTextFix?: boolean
 ): Promise<FixReport> {
-  const body: Record<string, string> = {
+  const body: Record<string, unknown> = {
     session_id: sessionId,
     rule_id: ruleId,
   };
   if (customRulesYaml) {
     body.custom_rules_yaml = customRulesYaml;
+  }
+  if (includeTextFix) {
+    body.include_text_fix = true;
   }
 
   const response = await fetch(`${API_BASE}/fix`, {
@@ -236,4 +242,35 @@ export async function generateRules(
   });
 
   return handleResponse<AiGenerateRulesResponse>(response);
+}
+
+/**
+ * POST /api/ai/review-conventions — 文本排版争议 AI 审查
+ */
+export interface AiReviewConventionsResponse {
+  reviews: Array<{
+    id: string;
+    verdict: "confirmed" | "ignored" | "uncertain";
+    reason: string;
+  }>;
+}
+
+export async function reviewConventions(
+  sessionId: string,
+  disputedItems: DisputedItem[],
+  documentStats: Record<string, number>
+): Promise<AiReviewConventionsResponse> {
+  const response = await fetch(`${API_BASE}/ai/review-conventions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      disputed_items: disputedItems,
+      document_stats: documentStats,
+    }),
+  });
+
+  return handleResponse<AiReviewConventionsResponse>(response);
 }

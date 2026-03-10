@@ -97,3 +97,32 @@ special_checks:
 # ============================
 heading_style_fix:
   enabled: false
+
+# ============================
+# 六、通用文本排版习惯检查
+# ============================
+text_conventions:
+  bracket_mismatch:
+    enabled: true
+  quote_mismatch:
+    enabled: true
+  duplicate_punctuation:
+    enabled: true
+  extra_spaces_in_chinese:
+    enabled: true
+  consecutive_spaces:
+    enabled: true
+  leading_trailing_spaces:
+    enabled: true
+  fullwidth_space:
+    enabled: true
+  cjk_english_spacing:
+    enabled: true
+    require_space: null
+  fullwidth_halfwidth_punctuation:
+    enabled: true
+    context: "chinese"
+  sentence_ending_punctuation:
+    enabled: true
+  ai_review:
+    enabled: true
