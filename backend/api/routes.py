@@ -5,8 +5,12 @@ API 路由定义
 """
 
 import os
+import re
+import shutil
 import uuid
+import logging
 import tempfile
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
@@ -29,12 +33,85 @@ from services.rules_service import get_rules_list, get_rule_path, get_rule_detai
 from services.checker_service import run_check
 from services.fixer_service import run_fix
 from services.extractor_service import run_extract
+from config import TEMP_DIR, MAX_FILE_SIZE
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# 临时文件目录
-TEMP_DIR = os.environ.get("DOCX_FIX_TEMP_DIR", "/tmp/docx-fix")
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+# session_id 合法格式：UUID v4
+_SESSION_ID_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", re.IGNORECASE)
+
+
+def _validate_session_id(session_id: str) -> str:
+    """校验 session_id 格式，防止路径穿越攻击。
+
+    Args:
+        session_id: 客户端传入的 session_id
+
+    Returns:
+        校验通过的 session_id
+
+    Raises:
+        HTTPException: session_id 格式非法
+    """
+    if not _SESSION_ID_PATTERN.match(session_id):
+        logger.warning(f"非法 session_id 被拦截: {session_id!r}")
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="INVALID_SESSION_ID",
+                message="会话 ID 格式无效"
+            ).model_dump(),
+        )
+    return session_id
+
+
+def _safe_session_dir(session_id: str) -> str:
+    """根据已校验的 session_id 构建安全的 session 目录路径。
+
+    额外做 resolve() 检查，确保最终路径确实在 TEMP_DIR 下。
+
+    Args:
+        session_id: 已通过 _validate_session_id 校验的 session_id
+
+    Returns:
+        session 目录的绝对路径
+
+    Raises:
+        HTTPException: 路径不在 TEMP_DIR 下（二次防御）
+    """
+    session_dir = Path(TEMP_DIR) / session_id
+    resolved = session_dir.resolve()
+    temp_resolved = Path(TEMP_DIR).resolve()
+    if not str(resolved).startswith(str(temp_resolved)):
+        logger.error(f"路径穿越检测: session_id={session_id!r}, resolved={resolved}")
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="INVALID_SESSION_ID",
+                message="会话 ID 格式无效"
+            ).model_dump(),
+        )
+    return str(session_dir)
+
+
+def _safe_filename(filename: str) -> str:
+    """清理文件名，移除路径分隔符等危险字符。
+
+    Args:
+        filename: 客户端传入的原始文件名
+
+    Returns:
+        安全的文件名（仅保留文件名部分）
+    """
+    # 只取文件名部分（去掉任何路径前缀）
+    safe = Path(filename).name
+    # 再次确认不包含路径分隔符
+    safe = safe.replace("/", "_").replace("\\", "_").replace("..", "_")
+    if not safe:
+        safe = "document.docx"
+    return safe
 
 
 # ========================================
@@ -213,18 +290,21 @@ async def check_file(
     # 4. 生成 session_id（如果未提供）
     if not session_id:
         session_id = str(uuid.uuid4())
+    else:
+        _validate_session_id(session_id)
 
     # 5. 保存文件到临时目录
-    session_dir = os.path.join(TEMP_DIR, session_id)
+    safe_name = _safe_filename(file.filename)
+    session_dir = _safe_session_dir(session_id)
     os.makedirs(session_dir, exist_ok=True)
-    filepath = os.path.join(session_dir, file.filename)
+    filepath = os.path.join(session_dir, safe_name)
     with open(filepath, "wb") as f:
         f.write(content)
 
     # 保存元信息
     meta_path = os.path.join(session_dir, "_meta.txt")
     with open(meta_path, "w") as f:
-        f.write(f"{file.filename}\n{rule_id}")
+        f.write(f"{safe_name}\n{rule_id}")
 
     # 6. 执行检查
     try:
@@ -232,12 +312,13 @@ async def check_file(
             filepath=filepath,
             rules_path=rules_path,
             session_id=session_id,
-            filename=file.filename,
+            filename=safe_name,
             rule_id=rule_id,
             rule_name=rule_name,
         )
         return report
     except Exception as e:
+        logger.error(f"文件检查失败: session_id={session_id}, error={e}")
         raise HTTPException(
             status_code=422,
             detail=ErrorResponse(
@@ -262,7 +343,8 @@ async def fix_file(
 
     当请求体中 custom_rules_yaml 非空时，使用该自定义 YAML 规则内容进行修复。
     """
-    session_dir = os.path.join(TEMP_DIR, request.session_id)
+    _validate_session_id(request.session_id)
+    session_dir = _safe_session_dir(request.session_id)
 
     # 验证 session 存在
     if not os.path.exists(session_dir):
@@ -350,6 +432,7 @@ async def fix_file(
         )
         return report
     except Exception as e:
+        logger.error(f"文件修复失败: session_id={request.session_id}, error={e}")
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -369,7 +452,8 @@ async def fix_file(
 @router.get("/fix/download")
 async def download_fixed_file(session_id: str):
     """下载修复后的 .docx 文件"""
-    session_dir = os.path.join(TEMP_DIR, session_id)
+    _validate_session_id(session_id)
+    session_dir = _safe_session_dir(session_id)
 
     if not os.path.exists(session_dir):
         raise HTTPException(
@@ -445,9 +529,10 @@ async def extract_rules(
 
     # 3. 保存文件到临时目录
     session_id = str(uuid.uuid4())
-    session_dir = os.path.join(TEMP_DIR, session_id)
+    session_dir = _safe_session_dir(session_id)
     os.makedirs(session_dir, exist_ok=True)
-    filepath = os.path.join(session_dir, file.filename)
+    safe_name = _safe_filename(file.filename)
+    filepath = os.path.join(session_dir, safe_name)
     with open(filepath, "wb") as f:
         f.write(content)
 
@@ -501,9 +586,12 @@ async def extract_rules(
         return ExtractRulesResponse(
             yaml_content=result["yaml_content"],
             summary=summary,
-            filename=file.filename,
+            filename=safe_name,
         )
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"模板提取失败: filename={safe_name}, error={e}")
         raise HTTPException(
             status_code=422,
             detail=ErrorResponse(
@@ -513,5 +601,4 @@ async def extract_rules(
         )
     finally:
         # 清理临时文件（提取完成后不需要保留）
-        import shutil
         shutil.rmtree(session_dir, ignore_errors=True)

@@ -5,17 +5,10 @@
 提供 Web API 友好的接口（JSON 序列化）。
 """
 
-import os
-import sys
 from datetime import datetime, timezone
 
 from api.schemas import CheckItemResult, CheckReport, CheckSummary, CheckStatus
-
-# 将 backend/scripts/ 加入 sys.path，以便导入 checker.py
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPTS_DIR = os.path.join(BACKEND_DIR, "scripts")
-if SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, SCRIPTS_DIR)
+from scripts.checker import DocxChecker
 
 
 def run_check(
@@ -39,8 +32,6 @@ def run_check(
     Returns:
         CheckReport 检查报告
     """
-    from checker import DocxChecker
-
     checker = DocxChecker(filepath, rules_path)
     checker.run_all_checks()
 

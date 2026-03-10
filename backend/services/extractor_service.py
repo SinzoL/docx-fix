@@ -5,19 +5,13 @@
 提供 Web API 友好的接口（JSON/YAML 序列化）。
 """
 
-import os
 import sys
 import io
 from collections import OrderedDict
 from datetime import datetime, timezone
 
 import yaml
-
-# 将 backend/scripts/ 加入 sys.path，以便导入 rule_extractor.py
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPTS_DIR = os.path.join(BACKEND_DIR, "scripts")
-if SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, SCRIPTS_DIR)
+from scripts.rule_extractor import RuleExtractor, OrderedDumper
 
 
 def run_extract(
@@ -38,8 +32,6 @@ def run_extract(
         - yaml_content: str — 格式化的 YAML 字符串
         - summary: dict — 提取结果摘要
     """
-    from rule_extractor import RuleExtractor, OrderedDumper
-
     # 屏蔽 RuleExtractor 的 print 输出（CLI 彩色输出在 Web 中无意义）
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()

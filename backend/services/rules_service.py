@@ -7,15 +7,18 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import re
+from pathlib import Path
 
 import yaml
 
 from api.schemas import RuleInfo
+from config import RULES_DIR
 
-# backend 目录
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RULES_DIR = os.path.join(BACKEND_DIR, "rules")
+logger = logging.getLogger(__name__)
+
 DEFAULT_RULE_ID = "default"
 
 
@@ -51,10 +54,12 @@ def get_rules_list() -> list[RuleInfo]:
                     is_default=(rule_id == DEFAULT_RULE_ID),
                 )
             )
-        except yaml.YAMLError:
+        except yaml.YAMLError as e:
             # YAML 语法错误，跳过该文件
+            logger.warning(f"规则文件 YAML 解析失败: {filename}, error={e}")
             continue
-        except Exception:
+        except Exception as e:
+            logger.warning(f"规则文件读取失败: {filename}, error={e}")
             continue
 
     # 默认规则排首位
@@ -66,11 +71,21 @@ def get_rules_list() -> list[RuleInfo]:
 def get_rule_path(rule_id: str) -> str | None:
     """根据 rule_id 获取规则文件的绝对路径。
 
+    对 rule_id 做安全校验，防止路径穿越攻击。
+
     Returns:
         规则文件路径，如果不存在则返回 None
     """
+    # 安全校验：rule_id 只允许字母、数字、下划线、连字符
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", rule_id):
+        return None
+
     for ext in (".yaml", ".yml"):
         path = os.path.join(RULES_DIR, rule_id + ext)
+        # 二次防御：确保解析后的路径在 RULES_DIR 下
+        resolved = Path(path).resolve()
+        if not str(resolved).startswith(str(Path(RULES_DIR).resolve())):
+            return None
         if os.path.exists(path):
             return path
     return None
@@ -89,5 +104,6 @@ def get_rule_detail(rule_id: str) -> dict | None:
     try:
         with open(path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
-    except Exception:
+    except Exception as e:
+        logger.error(f"规则文件解析失败: rule_id={rule_id}, path={path}, error={e}")
         return None

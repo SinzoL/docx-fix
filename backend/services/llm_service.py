@@ -3,29 +3,22 @@ LLM 服务封装
 
 使用 OpenAI Python SDK 调用 DeepSeek API（兼容 OpenAI 接口）。
 提供流式（streaming）和非流式两种调用模式。
-
-环境变量：
-    DEEPSEEK_API_KEY: DeepSeek API Key
-    DEEPSEEK_BASE_URL: API 基础 URL（默认 https://api.deepseek.com/v1）
-    DEEPSEEK_MODEL: 模型名称（默认 deepseek-chat）
 """
 
-import os
 import logging
 from typing import AsyncGenerator, Optional
 
 from openai import AsyncOpenAI
 
+from config import (
+    DEEPSEEK_API_KEY as _api_key,
+    DEEPSEEK_BASE_URL as _base_url,
+    DEEPSEEK_MODEL as _model,
+    LLM_DEFAULT_MAX_TOKENS as DEFAULT_MAX_TOKENS,
+    LLM_DEFAULT_TEMPERATURE as DEFAULT_TEMPERATURE,
+)
+
 logger = logging.getLogger(__name__)
-
-# 从环境变量读取配置
-_api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-_base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-
-# 默认参数
-DEFAULT_MAX_TOKENS = 2048
-DEFAULT_TEMPERATURE = 0.3  # 偏低温度，输出更稳定
 
 # 初始化 AsyncOpenAI 客户端（兼容 DeepSeek）
 _client: Optional[AsyncOpenAI] = None

@@ -6,7 +6,6 @@
 """
 
 import os
-import sys
 import shutil
 from datetime import datetime, timezone
 
@@ -16,12 +15,8 @@ from api.schemas import (
     ChangedItem,
     CheckStatus,
 )
-
-# 将 backend/scripts/ 加入 sys.path，以便导入 fixer.py 和 checker.py
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPTS_DIR = os.path.join(BACKEND_DIR, "scripts")
-if SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, SCRIPTS_DIR)
+from scripts.checker import DocxChecker
+from scripts.fixer import DocxFixer
 
 
 def run_fix(
@@ -50,9 +45,6 @@ def run_fix(
     Returns:
         FixReport 修复报告
     """
-    from checker import DocxChecker
-    from fixer import DocxFixer
-
     # 1. 修复前检查
     checker_before = DocxChecker(filepath, rules_path)
     checker_before.run_all_checks()
