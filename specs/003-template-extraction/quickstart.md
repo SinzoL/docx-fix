@@ -5,7 +5,7 @@
 
 ## 前置条件
 
-- Python ≥ 3.9 + pip
+- Python ≥ 3.12 + pip
 - Node.js ≥ 18 + npm
 - 已有 docx-fix 项目代码
 

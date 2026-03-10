@@ -5,10 +5,13 @@
 提供 Web API 友好的接口（JSON/YAML 序列化）。
 """
 
-import sys
+from __future__ import annotations
+
 import io
 from collections import OrderedDict
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
+from typing import Optional
 
 import yaml
 from scripts.rule_extractor import RuleExtractor, OrderedDumper
@@ -16,8 +19,8 @@ from scripts.rule_extractor import RuleExtractor, OrderedDumper
 
 def run_extract(
     filepath: str,
-    name: str | None = None,
-    description: str | None = None,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
 ) -> dict:
     """从 .docx 模板文件中提取格式规则。
 
@@ -32,15 +35,12 @@ def run_extract(
         - yaml_content: str — 格式化的 YAML 字符串
         - summary: dict — 提取结果摘要
     """
-    # 屏蔽 RuleExtractor 的 print 输出（CLI 彩色输出在 Web 中无意义）
-    old_stdout = sys.stdout
-    sys.stdout = io.StringIO()
-
-    try:
+    # #7: 使用 contextlib.redirect_stdout 替代手动 sys.stdout 操作
+    # 这在多线程/多协程环境下比直接赋值 sys.stdout 更安全
+    devnull = io.StringIO()
+    with redirect_stdout(devnull):
         extractor = RuleExtractor(filepath)
         rules = extractor.extract_all(name=name, description=description)
-    finally:
-        sys.stdout = old_stdout
 
     # 生成格式化的 YAML 字符串
     yaml_content = _rules_to_yaml(rules, OrderedDumper)

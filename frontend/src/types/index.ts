@@ -18,6 +18,7 @@ export interface RuleInfo {
   name: string;
   description: string;
   is_default: boolean;
+  is_preset: boolean;
 }
 
 export interface RuleDetailItem {
@@ -86,23 +87,22 @@ export interface ChangedItem {
   message: string;
 }
 
+export interface FixSummary {
+  pass_count: number;
+  warn: number;
+  fail: number;
+}
+
 export interface FixReport {
   session_id: string;
   filename: string;
   rule_name: string;
   fix_items: FixItemResult[];
-  before_summary: {
-    pass: number;
-    warn: number;
-    fail: number;
-  };
-  after_summary: {
-    pass: number;
-    warn: number;
-    fail: number;
-  };
+  before_summary: FixSummary;
+  after_summary: FixSummary;
   changed_items: ChangedItem[];
   fixed_at: string;
+  after_items?: CheckItemResult[];  // #1: 修复后完整检查项列表（可选，旧版 API 无此字段）
 }
 
 // ========================================

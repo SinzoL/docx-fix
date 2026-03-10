@@ -1,0 +1,99 @@
+# ============================================================
+# 国标公文格式检查规则
+# 参考 GB/T 9704-2012《党政机关公文格式》
+# ============================================================
+
+meta:
+  name: "国标公文 (GB/T 9704)"
+  version: "1.0"
+  is_preset: true
+  description: "依据 GB/T 9704-2012 党政机关公文格式标准（A4纸张、仿宋正文、特殊页边距）"
+
+# ============================
+# 一、页面设置
+# ============================
+page_setup:
+  paper_size: "A4"
+  width_cm: 21.0
+  height_cm: 29.7
+  margin_top_cm: 3.7        # 版心上边缘距上页边 37mm
+  margin_bottom_cm: 3.5     # 版心下边缘距下页边 35mm
+  margin_left_cm: 2.8       # 版心左边缘距左页边 28mm
+  margin_right_cm: 2.6      # 版心右边缘距右页边 26mm
+
+# ============================
+# 二、样式定义
+# ============================
+styles:
+  # 正文样式
+  Normal:
+    paragraph:
+      line_spacing: 575           # 公文行距约 28.95 磅 ≈ 575 twip (at exact)
+      line_spacing_rule: "exact"
+      alignment: "both"           # 两端对齐
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "仿宋"     # 公文正文用仿宋
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 16            # 三号
+
+  # 主标题（公文标题）
+  "Heading 1":
+    paragraph:
+      alignment: "center"
+      space_before_pt: 0
+      space_after_pt: 0
+    character:
+      font_east_asia: "SimSun"   # 方正小标宋（部分系统回退到宋体）
+      font_ascii: "Times New Roman"
+      font_size_pt: 22            # 二号
+      bold: false
+
+  # 一级标题
+  "Heading 2":
+    paragraph:
+      alignment: "left"
+    character:
+      font_east_asia: "黑体"
+      font_ascii: "Times New Roman"
+      font_size_pt: 16            # 三号
+      bold: false
+
+  # 二级标题
+  "Heading 3":
+    paragraph:
+      alignment: "left"
+    character:
+      font_east_asia: "楷体"
+      font_ascii: "Times New Roman"
+      font_size_pt: 16            # 三号
+      bold: false
+
+# ============================
+# 三、文档结构
+# ============================
+structure:
+  heading_hierarchy:
+    enabled: true
+    max_heading_depth: 4
+
+# ============================
+# 四、特殊检查
+# ============================
+special_checks:
+  template_instructions_check:
+    enabled: false
+  body_font_consistency:
+    enabled: true
+    expected_east_asia: "仿宋"
+    expected_ascii: "Times New Roman"
+  heading_font_consistency:
+    enabled: false
+  figure_table_caption:
+    enabled: false
+
+# ============================
+# 五、标题样式修复
+# ============================
+heading_style_fix:
+  enabled: false

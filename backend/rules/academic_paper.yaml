@@ -1,0 +1,105 @@
+# ============================================================
+# 通用学术论文格式检查规则
+# 适用于一般大学本科/硕士学位论文
+# ============================================================
+
+meta:
+  name: "通用学术论文"
+  version: "1.0"
+  is_preset: true
+  description: "学术论文通用格式规范（A4纸张、宋体正文、黑体标题、Times New Roman英文）"
+
+# ============================
+# 一、页面设置
+# ============================
+page_setup:
+  paper_size: "A4"
+  width_cm: 21.0
+  height_cm: 29.7
+  margin_top_cm: 2.54
+  margin_bottom_cm: 2.54
+  margin_left_cm: 3.17
+  margin_right_cm: 3.17
+
+# ============================
+# 二、样式定义
+# ============================
+styles:
+  # 正文样式
+  Normal:
+    paragraph:
+      line_spacing: 360           # 1.5 倍行距
+      line_spacing_rule: "auto"
+      alignment: "both"           # 两端对齐
+    character:
+      font_ascii: "Times New Roman"
+      font_east_asia: "宋体"
+      font_hAnsi: "Times New Roman"
+      font_size_pt: 12            # 小四号
+
+  # 一级标题（章标题）
+  "Heading 1":
+    paragraph:
+      alignment: "center"
+      space_before_pt: 24
+      space_after_pt: 18
+    character:
+      font_east_asia: "黑体"
+      font_ascii: "Times New Roman"
+      font_size_pt: 16            # 三号
+      bold: true
+
+  # 二级标题（节标题）
+  "Heading 2":
+    paragraph:
+      alignment: "left"
+      space_before_pt: 12
+      space_after_pt: 6
+    character:
+      font_east_asia: "黑体"
+      font_ascii: "Times New Roman"
+      font_size_pt: 14            # 四号
+      bold: true
+
+  # 三级标题（子节标题）
+  "Heading 3":
+    paragraph:
+      alignment: "left"
+      space_before_pt: 6
+      space_after_pt: 6
+    character:
+      font_east_asia: "黑体"
+      font_ascii: "Times New Roman"
+      font_size_pt: 12            # 小四号
+      bold: true
+
+# ============================
+# 三、文档结构
+# ============================
+structure:
+  heading_hierarchy:
+    enabled: true
+    max_heading_depth: 4
+
+# ============================
+# 四、特殊检查
+# ============================
+special_checks:
+  template_instructions_check:
+    enabled: false
+  body_font_consistency:
+    enabled: true
+    expected_east_asia: "宋体"
+    expected_ascii: "Times New Roman"
+  heading_font_consistency:
+    enabled: true
+  figure_table_caption:
+    enabled: true
+    figure_prefix: "图"
+    table_prefix: "表"
+
+# ============================
+# 五、标题样式修复
+# ============================
+heading_style_fix:
+  enabled: false

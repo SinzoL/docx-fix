@@ -100,7 +100,7 @@ docx-fix/
 
 ### 环境要求
 
-- Python ≥ 3.9
+- Python ≥ 3.12
 - Node.js ≥ 18
 - Docker & Docker Compose（生产部署）
 

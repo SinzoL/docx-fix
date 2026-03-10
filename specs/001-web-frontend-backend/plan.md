@@ -9,7 +9,7 @@
 
 ## Technical Context
 
-**Language/Version**: Python 3.9+ (后端) / TypeScript 5 (前端)
+**Language/Version**: Python 3.12+ (后端) / TypeScript 5 (前端)
 **Primary Dependencies**:
 - 后端：FastAPI, uvicorn, python-multipart（文件上传）, python-docx, lxml, pyyaml（已有）
 - 前端：React 18, TDesign React v1.12.0, Vite 5, TailwindCSS 3.4.17, idb（IndexedDB 封装）

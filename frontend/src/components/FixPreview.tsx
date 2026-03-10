@@ -5,13 +5,14 @@
  * - 展示修复前后 summary 对比
  * - 展示修复项列表
  * - 展示变化项（before_status → after_status）
+ * - #1: 展示修复后完整检查报告
  * - 下载修复后文件
  */
 
 import { useState, useCallback } from "react";
 import { MessagePlugin } from "tdesign-react";
 import { downloadFixedFile, triggerDownload } from "../services/api";
-import type { FixReport } from "../types";
+import type { FixReport, CheckItemResult } from "../types";
 import { SvgIcon } from "./icons/SvgIcon";
 
 interface FixPreviewProps {
@@ -20,12 +21,20 @@ interface FixPreviewProps {
   onDownloadComplete: () => void;
 }
 
+// 状态颜色映射（复用 CheckReport 的逻辑）
+const STATUS_CONFIG = {
+  PASS: { icon: "check", label: "通过" },
+  WARN: { icon: "alert-triangle", label: "警告" },
+  FAIL: { icon: "x-circle", label: "失败" },
+};
+
 export default function FixPreview({
   report,
   sessionId,
   onDownloadComplete,
 }: FixPreviewProps) {
   const [downloading, setDownloading] = useState(false);
+  const [showFullReport, setShowFullReport] = useState(false);
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);
@@ -44,6 +53,13 @@ export default function FixPreview({
     }
   }, [sessionId, report.filename, onDownloadComplete]);
 
+  // 按类别分组修复后检查项
+  const groupedAfterItems = (report.after_items ?? []).reduce<Record<string, CheckItemResult[]>>((groups, item) => {
+    if (!groups[item.category]) groups[item.category] = [];
+    groups[item.category].push(item);
+    return groups;
+  }, {});
+
   return (
     <div className="space-y-4">
       {/* 修复概览 */}
@@ -59,7 +75,7 @@ export default function FixPreview({
             <p className="text-sm font-medium text-slate-500 mt-2 flex items-center gap-2">
               <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{report.filename}</span> 
               <span>·</span> 
-              <span>模板：<span className="text-emerald-600">{report.rule_name}</span></span>
+              <span>检查标准：<span className="text-emerald-600">{report.rule_name}</span></span>
             </p>
           </div>
 
@@ -96,7 +112,7 @@ export default function FixPreview({
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center">
                 <div className="text-3xl font-black text-emerald-600/50 font-display">
-                  {report.before_summary.pass}
+                  {report.before_summary.pass_count}
                 </div>
                 <div className="text-xs font-bold text-slate-500 mt-1 uppercase tracking-wider">通过</div>
               </div>
@@ -125,7 +141,7 @@ export default function FixPreview({
             <div className="grid grid-cols-3 gap-4 relative z-10">
               <div className="text-center">
                 <div className="text-3xl font-black text-emerald-600 font-display animate-in zoom-in duration-500">
-                  {report.after_summary.pass}
+                  {report.after_summary.pass_count}
                 </div>
                 <div className="text-xs font-bold text-emerald-800 mt-1 uppercase tracking-wider">通过</div>
               </div>
@@ -157,7 +173,6 @@ export default function FixPreview({
           </div>
           <div className="divide-y divide-slate-100/50">
             {report.changed_items.map((item, index) => {
-              // 使用完整预定义类名，避免 Tailwind 动态拼接在生产构建时被 tree-shake 掉
               const STATUS_STYLES = {
                 FAIL: { bg: 'bg-rose-100 text-rose-700 border-rose-200', label: '失败' },
                 WARN: { bg: 'bg-amber-100 text-amber-700 border-amber-200', label: '警告' },
@@ -222,6 +237,51 @@ export default function FixPreview({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* #1: 修复后完整检查报告（可展开/收起） */}
+      {(report.after_items ?? []).length > 0 && (
+        <div className="glass-card rounded-xl overflow-hidden border border-white/60">
+          <div
+            className="px-6 py-4 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-100/80 transition-colors"
+            onClick={() => setShowFullReport(!showFullReport)}
+          >
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <span className="w-2 h-6 bg-indigo-500 rounded-full"></span>
+              修复后完整检查报告 ({(report.after_items ?? []).length} 项)
+            </h3>
+            <span className={`text-slate-400 transition-transform duration-200 ${showFullReport ? 'rotate-90' : ''}`}>
+              <SvgIcon name="chevron-right" size={16} />
+            </span>
+          </div>
+          {showFullReport && (
+            <div className="divide-y divide-slate-100/50 animate-in fade-in slide-in-from-top-2 duration-200">
+              {Object.entries(groupedAfterItems).map(([category, items]) => (
+                <div key={category}>
+                  <div className="px-6 py-3 bg-slate-50/50 text-sm font-bold text-slate-600">
+                    {category}
+                  </div>
+                  {items.map((item, idx) => {
+                    const config = STATUS_CONFIG[item.status];
+                    return (
+                      <div key={`${item.item}-${idx}`} className="px-6 py-3 flex items-center gap-3 hover:bg-blue-50/20 transition-colors">
+                        <span className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold border ${
+                          item.status === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          item.status === 'WARN' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}>
+                          <SvgIcon name={config.icon} size={12} /> {config.label}
+                        </span>
+                        <span className="text-sm font-medium text-slate-700">{item.item}</span>
+                        <span className="text-xs text-slate-500 truncate">{item.message}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

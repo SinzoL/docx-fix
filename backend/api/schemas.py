@@ -30,6 +30,7 @@ class RuleInfo(BaseModel):
     name: str
     description: str
     is_default: bool
+    is_preset: bool = False
 
 
 class RuleDetailItem(BaseModel):
@@ -127,16 +128,24 @@ class ChangedItem(BaseModel):
     message: str
 
 
+class FixSummary(BaseModel):
+    """修复前后检查汇总（强类型）"""
+    pass_count: int
+    warn: int
+    fail: int
+
+
 class FixReport(BaseModel):
     """POST /api/fix 响应 — 修复结果预览"""
     session_id: str
     filename: str
     rule_name: str
     fix_items: list[FixItemResult]
-    before_summary: dict
-    after_summary: dict
+    before_summary: FixSummary
+    after_summary: FixSummary
     changed_items: list[ChangedItem]
     fixed_at: str
+    after_items: list[CheckItemResult] = []  # 修复后的完整检查项列表
 
 
 # ========================================

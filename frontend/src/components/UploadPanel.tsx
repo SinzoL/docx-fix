@@ -12,7 +12,7 @@ import { Select, MessagePlugin, Upload } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
 import { fetchRules, checkFile } from "../services/api";
-import { getAll as getAllCustomRules, init as initRuleStorage } from "../services/ruleStorage";
+import { getAll as getAllCustomRules } from "../services/ruleStorage";
 import type { RuleInfo, CheckReport, CustomRule } from "../types";
 import { SvgIcon } from "./icons/SvgIcon";
 
@@ -25,6 +25,8 @@ interface UploadPanelProps {
   /** 当选择自定义规则时，传递 YAML 内容（用于 check/fix API 的 custom_rules_yaml 参数） */
   customRulesYaml?: string;
   onCustomRulesYamlChange?: (yaml: string | undefined) => void;
+  /** #12: 引导用户前往提取规则面板 */
+  onGoToExtract?: () => void;
 }
 
 export default function UploadPanel({
@@ -34,6 +36,7 @@ export default function UploadPanel({
   selectedRuleId,
   onRuleChange,
   onCustomRulesYamlChange,
+  onGoToExtract,
 }: UploadPanelProps) {
   const [rules, setRules] = useState<RuleInfo[]>([]);
   const [customRules, setCustomRules] = useState<CustomRule[]>([]);
@@ -45,8 +48,7 @@ export default function UploadPanel({
   useEffect(() => {
     setRulesLoading(true);
 
-    // 初始化本地存储并加载自定义规则
-    initRuleStorage();
+    // 加载自定义规则（initRuleStorage 已在 App.tsx 全局执行，此处仅读取）
     setCustomRules(getAllCustomRules());
 
     fetchRules()
@@ -117,7 +119,7 @@ export default function UploadPanel({
       return;
     }
     if (!selectedRuleId) {
-      MessagePlugin.warning("请选择检查模板");
+      MessagePlugin.warning("请选择检查标准");
       return;
     }
 
@@ -157,14 +159,14 @@ export default function UploadPanel({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex-1 w-full">
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                第一步：选择检查模板规则
+                第一步：选择检查标准
               </label>
               <div className="relative max-w-full sm:max-w-lg">
                 <Select
                   value={selectedRuleId}
                   onChange={(val) => handleRuleChange(val as string)}
                   loading={rulesLoading}
-                  placeholder="选择检查模板"
+                  placeholder="选择检查标准"
                   size="large"
                   className="!border-white/80 shadow-sm bg-white/80"
                   style={{ width: "100%", borderRadius: "0.75rem" }}
@@ -187,7 +189,14 @@ export default function UploadPanel({
                           className="rounded-lg mb-1 hover:bg-blue-50/50"
                         >
                           <div className="py-1">
-                            <div className="font-semibold text-slate-800">{rule.name}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-800">{rule.name}</span>
+                              {rule.is_preset && (
+                                <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                                  预设
+                                </span>
+                              )}
+                            </div>
                             {rule.description && (
                               <div className="text-xs text-slate-500 mt-1 whitespace-normal leading-relaxed">
                                 {rule.description}
@@ -231,10 +240,22 @@ export default function UploadPanel({
                   )}
                 </Select>
               </div>
+              {/* #12: 引导用户去提取/创建自定义规则 */}
+              {customRules.length === 0 && onGoToExtract && (
+                <p className="text-xs text-slate-400 mt-2">
+                  没有找到合适的规则？
+                  <button
+                    onClick={onGoToExtract}
+                    className="text-blue-500 hover:text-blue-600 hover:underline font-medium ml-1 cursor-pointer"
+                  >
+                    去提取 / 创建自定义规则 →
+                  </button>
+                </p>
+              )}
             </div>
             {/* 可选的规则解释小提示 */}
             <div className="text-xs text-slate-500 bg-slate-100/80 px-4 py-2 rounded-lg max-w-xs hidden md:block border border-slate-200/50">
-              <SvgIcon name="lightbulb" size={14} /> 检查报告将基于此模板包含的段落、字体、页边距等规则生成。
+              <SvgIcon name="lightbulb" size={14} /> 检查报告将基于此检查标准包含的段落、字体、页边距等规则生成。
             </div>
           </div>
         </div>

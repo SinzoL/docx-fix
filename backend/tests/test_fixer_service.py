@@ -58,12 +58,13 @@ class TestRunFix:
             filename="test_sample.docx",
             rule_name="通用默认检查",
         )
-        assert "pass" in report.before_summary
-        assert "warn" in report.before_summary
-        assert "fail" in report.before_summary
-        assert "pass" in report.after_summary
-        assert "warn" in report.after_summary
-        assert "fail" in report.after_summary
+        # FixSummary 是 Pydantic model，使用属性访问
+        assert hasattr(report.before_summary, "pass_count")
+        assert hasattr(report.before_summary, "warn")
+        assert hasattr(report.before_summary, "fail")
+        assert hasattr(report.after_summary, "pass_count")
+        assert hasattr(report.after_summary, "warn")
+        assert hasattr(report.after_summary, "fail")
 
     def test_fix_reduces_failures(self, sample_docx, default_rule_path):
         """修复应减少失败项数量（或至少不增加）"""
@@ -74,7 +75,7 @@ class TestRunFix:
             filename="test_sample.docx",
             rule_name="通用默认检查",
         )
-        assert report.after_summary["fail"] <= report.before_summary["fail"]
+        assert report.after_summary.fail <= report.before_summary.fail
 
     def test_fix_creates_fixed_file(self, sample_docx, default_rule_path):
         """修复应创建 _fixed.docx 文件"""

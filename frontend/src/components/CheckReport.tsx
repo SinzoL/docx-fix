@@ -6,8 +6,9 @@
  * - 显示 PASS/WARN/FAIL 状态标签
  * - 显示汇总统计（通过/警告/失败/可修复）
  * - 一键修复按钮（有可修复项时启用）
- * - 切换规则重新检查
+ * - 切换规则重新检查（包括自定义规则）
  * - 查看规则详情
+ * - #13: 历史报告只读模式
  */
 
 import { useMemo, useState, useEffect } from "react";
@@ -16,8 +17,10 @@ import type {
   CheckReport as CheckReportType,
   CheckItemResult,
   RuleInfo,
+  CustomRule,
 } from "../types";
 import { fetchRules, recheckFile } from "../services/api";
+import { getAll as getAllCustomRules } from "../services/ruleStorage";
 import RuleDetail from "./RuleDetail";
 import AiSummary from "./AiSummary";
 import AiChatPanel from "./AiChatPanel";
@@ -29,6 +32,12 @@ interface CheckReportProps {
   fixLoading: boolean;
   sessionId?: string;
   onRecheck?: (report: CheckReportType) => void;
+  /** #13: 只读模式（历史报告查看时启用，禁用修复和切换规则） */
+  readOnly?: boolean;
+  /** #2: 当前自定义规则 YAML */
+  customRulesYaml?: string;
+  /** #2: 自定义规则 YAML 变更回调 */
+  onCustomRulesYamlChange?: (yaml: string | undefined) => void;
 }
 
 // 状态颜色和图标映射
@@ -44,30 +53,51 @@ export default function CheckReportView({
   fixLoading,
   sessionId,
   onRecheck,
+  readOnly = false,
+  onCustomRulesYamlChange,
 }: CheckReportProps) {
   const [rules, setRules] = useState<RuleInfo[]>([]);
+  const [customRules, setCustomRules] = useState<CustomRule[]>([]);
   const [selectedRuleId, setSelectedRuleId] = useState(report.rule_id);
   const [recheckLoading, setRecheckLoading] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
 
-  // 加载规则列表（用于切换）
+  // #2 #16: 加载规则列表（服务端 + 本地自定义）
   useEffect(() => {
     fetchRules()
       .then((res) => setRules(res.rules))
       .catch(() => {});
+    setCustomRules(getAllCustomRules());
   }, []);
 
-  // 切换规则重新检查
+  // #2: 切换规则重新检查（支持自定义规则）
   const handleRuleSwitch = async (ruleId: string) => {
     setSelectedRuleId(ruleId as string);
     if (ruleId === report.rule_id || !sessionId || !onRecheck) return;
 
     setRecheckLoading(true);
     try {
-      const newReport = await recheckFile(sessionId, ruleId);
+      // 判断是否选择了自定义规则
+      const customRule = customRules.find((r) => `custom:${r.id}` === ruleId);
+      let newReport: CheckReportType;
+      let newCustomYaml: string | undefined;
+
+      if (customRule) {
+        newReport = await recheckFile(sessionId, "default", customRule.yaml_content);
+        newCustomYaml = customRule.yaml_content;
+      } else {
+        newReport = await recheckFile(sessionId, ruleId);
+        newCustomYaml = undefined;
+      }
+
       onRecheck(newReport);
-      MessagePlugin.success(`已切换为「${rules.find(r => r.id === ruleId)?.name || ruleId}」规则并重新检查`);
+      onCustomRulesYamlChange?.(newCustomYaml);
+
+      const displayName = customRule
+        ? customRule.name
+        : rules.find(r => r.id === ruleId)?.name || ruleId;
+      MessagePlugin.success(`已切换为「${displayName}」并重新检查`);
     } catch {
       MessagePlugin.error("重新检查失败，请重试");
       setSelectedRuleId(report.rule_id);
@@ -92,12 +122,12 @@ export default function CheckReportView({
   const hasFixable = report.summary.fixable > 0;
   const allPass = report.summary.fail === 0 && report.summary.warn === 0;
 
-  // 折叠状态：全 PASS 的类别默认折叠，含 FAIL/WARN 的默认展开
+  // 折叠状态
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const cat of categories) {
       const hasIssues = groupedItems[cat].some(i => i.status !== 'PASS');
-      init[cat] = !hasIssues; // 全 PASS → 折叠
+      init[cat] = !hasIssues;
     }
     return init;
   });
@@ -120,14 +150,24 @@ export default function CheckReportView({
     setCollapsed(next);
   };
 
+  // 规则列表合计（用于判断是否显示切换区域）
+  const totalRules = rules.length + customRules.length;
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* #13: 只读模式提示 */}
+      {readOnly && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm font-medium">
+          <SvgIcon name="alert-triangle" size={18} />
+          <span>正在查看历史报告（只读模式）。如需修复或切换检查标准，请重新上传文件。</span>
+        </div>
+      )}
+
       {/* AI 总结卡片 */}
       <AiSummary report={report} />
 
       {/* 汇总卡片 */}
       <div className="glass-card rounded-2xl p-4 sm:p-6 border-t-4 border-t-blue-500 relative overflow-hidden">
-        {/* 背景光晕装饰 */}
         <div className="absolute -top-20 -right-20 w-48 h-48 bg-blue-400/10 blur-3xl rounded-full pointer-events-none"></div>
         
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 mb-6 relative z-10">
@@ -138,7 +178,8 @@ export default function CheckReportView({
             <p className="text-sm font-medium text-slate-500 mt-2 flex items-center gap-2">
               <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">{report.filename}</span> 
               <span>·</span> 
-              <span>模板：<span className="text-blue-600">{report.rule_name}</span></span>
+              {/* #11: 统一术语为"检查标准" */}
+              <span>检查标准：<span className="text-blue-600">{report.rule_name}</span></span>
             </p>
           </div>
 
@@ -159,40 +200,38 @@ export default function CheckReportView({
               <span className="text-base"><SvgIcon name="clipboard-list" size={16} /></span> 规则详情
             </button>
 
-            {/* 修复按钮 */}
-            <button
-              disabled={!hasFixable || allPass || fixLoading}
-              onClick={onFix}
-              className={`px-6 py-2.5 text-sm font-bold rounded-xl flex items-center gap-2 transition-all shadow-md ${
-                allPass
-                  ? "bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-none cursor-default"
-                  : !hasFixable
-                    ? "bg-slate-100 text-slate-400 border border-slate-200 shadow-none cursor-not-allowed"
-                    : fixLoading
-                      ? "bg-blue-400 text-white cursor-wait shadow-none"
-                      : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 hover:shadow-blue-500/30 hover:-translate-y-0.5 cursor-pointer"
-              }`}
-            >
-              {allPass
-                ? <><SvgIcon name="check" size={16} /> 完美文档</>
-                : !hasFixable
-                  ? "无可修复项"
-                  : fixLoading
-                    ? <>
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        自动修复中...
-                      </>
-                    : <>
-                        <span className="text-base"><SvgIcon name="sparkles" size={16} /></span> 一键智能修复 ({report.summary.fixable})
-                      </>}
-            </button>
+            {/* #14: 全部通过时显示完美文档标签，无可修复项时隐藏按钮 */}
+            {allPass ? (
+              <span className="px-6 py-2.5 text-sm font-bold rounded-xl bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-2">
+                <SvgIcon name="check" size={16} /> 完美文档
+              </span>
+            ) : hasFixable && !readOnly ? (
+              <button
+                disabled={fixLoading}
+                onClick={onFix}
+                className={`px-6 py-2.5 text-sm font-bold rounded-xl flex items-center gap-2 transition-all shadow-md ${
+                  fixLoading
+                    ? "bg-blue-400 text-white cursor-wait shadow-none"
+                    : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 hover:shadow-blue-500/30 hover:-translate-y-0.5 cursor-pointer"
+                }`}
+              >
+                {fixLoading
+                  ? <>
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      自动修复中...
+                    </>
+                  : <>
+                      <span className="text-base"><SvgIcon name="sparkles" size={16} /></span> 一键智能修复 ({report.summary.fixable})
+                    </>}
+              </button>
+            ) : null}
           </div>
         </div>
 
-        {/* 规则切换 */}
-        {rules.length > 1 && (
+        {/* #2 #11 #13: 规则切换（含自定义规则，只读模式下禁用） */}
+        {totalRules > 1 && !readOnly && (
           <div className="mb-6 flex items-center gap-3 p-3 bg-slate-50/50 rounded-xl border border-slate-100">
-            <span className="text-sm font-medium text-slate-600 shrink-0">切换其他规则模板：</span>
+            <span className="text-sm font-medium text-slate-600 shrink-0">切换检查标准：</span>
             <Select
               value={selectedRuleId}
               onChange={(val) => handleRuleSwitch(val as string)}
@@ -201,11 +240,35 @@ export default function CheckReportView({
               size="small"
               className="!border-white shadow-sm"
             >
-              {rules.map((rule) => (
-                <Select.Option key={rule.id} value={rule.id} label={rule.name}>
-                  {rule.name}
-                </Select.Option>
-              ))}
+              {/* 预置规则 */}
+              {rules.length > 0 && (
+                <Select.OptionGroup label="预置标准" divider={customRules.length > 0}>
+                  {rules.map((rule) => (
+                    <Select.Option key={rule.id} value={rule.id} label={rule.name}>
+                      {rule.name}
+                    </Select.Option>
+                  ))}
+                </Select.OptionGroup>
+              )}
+              {/* #2: 自定义规则 */}
+              {customRules.length > 0 && (
+                <Select.OptionGroup label="我的规则">
+                  {customRules.map((rule) => (
+                    <Select.Option key={`custom:${rule.id}`} value={`custom:${rule.id}`} label={rule.name}>
+                      <div className="flex items-center gap-2">
+                        <span>{rule.name}</span>
+                        <span className={`px-1.5 py-0.5 text-xs rounded-full border ${
+                          rule.source === 'template-extract'
+                            ? 'bg-violet-100 text-violet-700 border-violet-200'
+                            : 'bg-amber-100 text-amber-700 border-amber-200'
+                        }`}>
+                          {rule.source === 'template-extract' ? '模板提取' : 'AI 生成'}
+                        </span>
+                      </div>
+                    </Select.Option>
+                  ))}
+                </Select.OptionGroup>
+              )}
             </Select>
             {recheckLoading && (
               <span className="text-xs font-semibold text-blue-500 flex items-center gap-1">
@@ -271,7 +334,6 @@ export default function CheckReportView({
               key={category}
               className="glass-card rounded-xl overflow-hidden border border-white/60 transition-all hover:border-blue-200"
             >
-              {/* 类别头部 - 可点击折叠/展开 */}
               <div
                 data-testid="category-header"
                 onClick={() => toggleCategory(category)}
@@ -307,7 +369,6 @@ export default function CheckReportView({
                 </div>
               </div>
 
-              {/* 检查项列表 - 折叠时隐藏 */}
               {!isCollapsed && <div className="divide-y divide-slate-100/50">
                 {items.map((item, index) => {
                   const config = STATUS_CONFIG[item.status];
@@ -316,7 +377,6 @@ export default function CheckReportView({
                       key={`${item.item}-${index}`}
                       className="px-6 py-4 flex flex-col sm:flex-row items-start gap-4 hover:bg-blue-50/30 transition-colors"
                     >
-                      {/* 状态标签 */}
                       <span className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
                         item.status === 'PASS' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                         item.status === 'WARN' ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -325,7 +385,6 @@ export default function CheckReportView({
                         <SvgIcon name={config.icon} size={14} /> {config.label}
                       </span>
 
-                      {/* 内容 */}
                       <div className="flex-1 min-w-0 pt-0.5">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
                           <span className="font-bold text-slate-800 text-sm">

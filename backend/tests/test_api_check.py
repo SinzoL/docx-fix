@@ -16,6 +16,10 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
+# 用于测试的固定 UUID（符合 UUID v4 格式）
+TEST_SESSION_API = "a0000000-0000-4000-8000-000000000001"
+TEST_SESSION_FLOW = "a0000000-0000-4000-8000-000000000002"
+
 
 @pytest.mark.asyncio
 class TestGetRulesAPI:
@@ -55,11 +59,11 @@ class TestCheckFileAPI:
             resp = await client.post(
                 "/api/check",
                 files={"file": ("test.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
-                data={"rule_id": "default", "session_id": "api-test-001"},
+                data={"rule_id": "default", "session_id": TEST_SESSION_API},
             )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["session_id"] == "api-test-001"
+        assert data["session_id"] == TEST_SESSION_API
         assert data["filename"] == "test.docx"
         assert "items" in data
         assert "summary" in data
@@ -85,14 +89,14 @@ class TestCheckFileAPI:
         assert resp.status_code == 400
 
     async def test_check_corrupted_file(self, client, corrupted_file):
-        """损坏文件应返回 422"""
+        """损坏文件应返回 400（魔数校验不通过）"""
         with open(corrupted_file, "rb") as f:
             resp = await client.post(
                 "/api/check",
                 files={"file": ("corrupted.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
                 data={"rule_id": "default"},
             )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
 
     async def test_check_generates_session_id(self, client, sample_docx):
         """未提供 session_id 时应自动生成"""
@@ -118,14 +122,14 @@ class TestCheckThenFixAPI:
             check_resp = await client.post(
                 "/api/check",
                 files={"file": ("test.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
-                data={"rule_id": "default", "session_id": "flow-test-001"},
+                data={"rule_id": "default", "session_id": TEST_SESSION_FLOW},
             )
         assert check_resp.status_code == 200
 
         # 2. 执行修复
         fix_resp = await client.post(
             "/api/fix",
-            json={"session_id": "flow-test-001", "rule_id": "default"},
+            json={"session_id": TEST_SESSION_FLOW, "rule_id": "default"},
         )
         assert fix_resp.status_code == 200
         fix_data = fix_resp.json()
@@ -133,7 +137,7 @@ class TestCheckThenFixAPI:
         assert "after_summary" in fix_data
 
         # 3. 下载修复文件
-        dl_resp = await client.get("/api/fix/download?session_id=flow-test-001")
+        dl_resp = await client.get(f"/api/fix/download?session_id={TEST_SESSION_FLOW}")
         assert dl_resp.status_code == 200
         assert len(dl_resp.content) > 0
 
@@ -144,13 +148,16 @@ class TestFixAPI:
 
     async def test_fix_session_not_found(self, client):
         """不存在的 session 应返回 404"""
+        # 使用合法 UUID 格式但不存在的 session
+        fake_session = "a0000000-0000-4000-8000-ffffffffffff"
         resp = await client.post(
             "/api/fix",
-            json={"session_id": "nonexistent-session", "rule_id": "default"},
+            json={"session_id": fake_session, "rule_id": "default"},
         )
         assert resp.status_code == 404
 
     async def test_download_session_not_found(self, client):
         """不存在的 session 下载应返回 404"""
-        resp = await client.get("/api/fix/download?session_id=nonexistent-session")
+        fake_session = "a0000000-0000-4000-8000-ffffffffffff"
+        resp = await client.get(f"/api/fix/download?session_id={fake_session}")
         assert resp.status_code == 404

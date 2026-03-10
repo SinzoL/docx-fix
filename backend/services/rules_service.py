@@ -52,6 +52,7 @@ def get_rules_list() -> list[RuleInfo]:
                     name=meta.get("name", rule_id),
                     description=meta.get("description", ""),
                     is_default=(rule_id == DEFAULT_RULE_ID),
+                    is_preset=bool(meta.get("is_preset", False)),
                 )
             )
         except yaml.YAMLError as e:

@@ -11,8 +11,10 @@ from datetime import datetime, timezone
 
 from api.schemas import (
     FixReport,
+    FixSummary,
     FixItemResult,
     ChangedItem,
+    CheckItemResult,
     CheckStatus,
 )
 from scripts.checker import DocxChecker
@@ -49,11 +51,11 @@ def run_fix(
     checker_before = DocxChecker(filepath, rules_path)
     checker_before.run_all_checks()
 
-    before_summary = {
-        "pass": sum(1 for r in checker_before.results if r.status == "PASS"),
-        "warn": sum(1 for r in checker_before.results if r.status == "WARN"),
-        "fail": sum(1 for r in checker_before.results if r.status == "FAIL"),
-    }
+    before_summary = FixSummary(
+        pass_count=sum(1 for r in checker_before.results if r.status == "PASS"),
+        warn=sum(1 for r in checker_before.results if r.status == "WARN"),
+        fail=sum(1 for r in checker_before.results if r.status == "FAIL"),
+    )
 
     # 2. 复制文件用于修复
     base, ext = os.path.splitext(filepath)
@@ -74,11 +76,24 @@ def run_fix(
     checker_after = DocxChecker(fixed_path, rules_path)
     checker_after.run_all_checks()
 
-    after_summary = {
-        "pass": sum(1 for r in checker_after.results if r.status == "PASS"),
-        "warn": sum(1 for r in checker_after.results if r.status == "WARN"),
-        "fail": sum(1 for r in checker_after.results if r.status == "FAIL"),
-    }
+    after_summary = FixSummary(
+        pass_count=sum(1 for r in checker_after.results if r.status == "PASS"),
+        warn=sum(1 for r in checker_after.results if r.status == "WARN"),
+        fail=sum(1 for r in checker_after.results if r.status == "FAIL"),
+    )
+
+    # 序列化修复后完整检查项（#1: 让前端能展示修复后完整报告）
+    after_items = [
+        CheckItemResult(
+            category=r.category,
+            item=r.item,
+            status=CheckStatus(r.status),
+            message=r.message,
+            location=r.location,
+            fixable=r.fixable,
+        )
+        for r in checker_after.results
+    ]
 
     # 5. 计算变化项
     before_map = {}
@@ -110,4 +125,5 @@ def run_fix(
         after_summary=after_summary,
         changed_items=changed_items,
         fixed_at=datetime.now(timezone.utc).isoformat(),
+        after_items=after_items,
     )

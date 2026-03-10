@@ -43,8 +43,8 @@ const mockFixReport: FixReport = {
   filename: "test.docx",
   rule_name: "通用默认检查",
   fix_items: [{ category: "字体", description: "修复中文字体" }],
-  before_summary: { pass: 5, warn: 1, fail: 2 },
-  after_summary: { pass: 7, warn: 1, fail: 0 },
+  before_summary: { pass_count: 5, warn: 1, fail: 2 },
+  after_summary: { pass_count: 7, warn: 1, fail: 0 },
   changed_items: [],
   fixed_at: "2026-01-01T00:00:00Z",
 };

@@ -2,8 +2,17 @@
 
 **Feature Branch**: `005-checker-enhance`  
 **Created**: 2026-03-10  
-**Status**: Draft  
+**Status**: Clarified
 **Input**: 基于开源项目（python-docx / unstructured / ragflow / mammoth / docling）分析成果，增强检查引擎核心能力
+
+## Clarifications
+
+### Session 2026-03-10
+
+- Q: checker.py 已有 1323 行，新增属性解析链和结构树验证后会进一步膨胀。新增逻辑应该如何组织？ → A: Option C — 创建 `checker/` 子包，将现有 checker.py 拆分为多个模块文件
+- Q: 新增的"场景化预设规则"在前端下拉中，应该如何与现有的两组规则融合？ → A: Option B — 预设规则与现有规则合并在同一个"预置规则"组中，通过 `is_preset` 标签小字标注"预设"进行视觉区分
+- Q: 增强属性解析链后可能多检出之前漏报的问题，这算"改变语义"吗？向后兼容的粒度如何定义？ → A: Option B — 已有的 PASS 不变 FAIL，但允许新增检查项（来自之前漏掉的 Run 级/结构级检查）
+- Q: 检查报告中"来源标注"（属性来自 Run 直接格式、段落样式还是 basedOn 链）应该如何展示？ → A: Option A — 来源信息融入 message 文案中（如"Run 直接格式覆盖：字号…"），不改数据结构
 
 ## 背景与动机
 
@@ -117,7 +126,7 @@
 
 - **FR-001**: 检查引擎 MUST 实现完整的属性解析优先级链：Run 直接格式 → 段落样式 rPr → basedOn 链 → docDefaults → Word 内置默认值
 - **FR-002**: `_get_style_xml_info()` 方法 MUST 支持读取文档默认样式（`w:docDefaults/w:rPrDefault` 和 `w:pPrDefault`）作为最终回退
-- **FR-003**: 段落格式检查 MUST 区分"Run 直接格式覆盖"和"样式继承值"，检查报告中明确标注来源
+- **FR-003**: 段落格式检查 MUST 区分"Run 直接格式覆盖"和"样式继承值"，来源信息融入检查消息文案中（如"Run 直接格式覆盖：字号当前 14pt，要求 12pt"），不新增独立字段
 - **FR-004**: 当 Run 直接格式覆盖导致不一致时，MUST 标记为 fixable（修复方式为清除直接格式）
 - **FR-005**: 样式 basedOn 链追溯 MUST 设置最大深度限制（默认 10 层），超过时终止并报告 WARN
 - **FR-006**: basedOn 链 MUST 检测循环引用，发现循环时终止并报告 WARN
@@ -135,7 +144,7 @@
 - **FR-012**: MUST 新增至少 2 个预设规则文件：`academic_paper.yaml`（通用学术论文）、`gov_document.yaml`（国标公文 GB/T 9704）
 - **FR-013**: 每个预设规则文件 MUST 遵循现有 YAML 规则结构（meta / page_setup / styles / structure / numbering / special_checks）
 - **FR-014**: 后端 rules_service MUST 在列出可用规则时包含预设规则，并标注 `is_preset: true` 区分预设与用户自定义规则
-- **FR-015**: 前端上传面板的规则下拉 MUST 展示预设规则组和用户自定义规则组，预设规则不可编辑/删除
+- **FR-015**: 前端上传面板的规则下拉 MUST 将预设规则与现有预置规则合并在同一个"预置规则"分组中，通过 `is_preset` 标签在选项中以小字标注"预设"进行视觉区分；预设规则不可编辑/删除
 - **FR-016**: 预设规则 MUST 包含 `meta.description` 字段，前端下拉列表 SHOULD 展示该描述作为提示
 
 ### Key Entities
@@ -159,7 +168,12 @@
 ```
 backend/
   ├── scripts/
-  │   └── checker.py                    [修改] 新增属性解析链 + 结构树验证 + 增强现有检查
+  │   └── checker/                      [重构] 从 checker.py 拆分为子包
+  │       ├── __init__.py               [新增] 对外接口不变，re-export 主入口
+  │       ├── base.py                   [新增] 核心检查类与公共工具方法
+  │       ├── property_resolver.py      [新增] 属性解析链（Run直接格式→样式→basedOn→docDefaults）
+  │       ├── heading_validator.py      [新增] 文档结构树验证（标题层级连续性/深度检查）
+  │       └── style_checker.py          [新增] 样式定义相关检查逻辑
   ├── rules/
   │   ├── default.yaml                  [保留] 通用默认
   │   ├── hit_midterm_report.yaml       [保留] 哈工大中期报告
@@ -212,7 +226,7 @@ frontend/src/
 ## 约束与风险
 
 - **Constitution 约束**：核心引擎仅依赖 `python-docx`、`lxml`、`pyyaml`，新增功能不得引入额外依赖
-- **向后兼容**：现有 `hit_midterm_report.yaml` 和 `default.yaml` 的检查结果不得因引擎增强而改变语义（可增加新检查项，但不得改变现有检查项的 PASS/FAIL 判定）
+- **向后兼容**：现有 `hit_midterm_report.yaml` 和 `default.yaml` 的检查结果中，已有的 PASS 项不得因引擎增强而变为 FAIL；但允许新增检查项（来自之前漏掉的 Run 级/结构级检查），即"检出更多问题"是预期行为而非回归
 - **性能风险**：basedOn 链递归追溯和结构树构建新增了计算量，MUST 确保对大文档（500+ 段落）的总检查时间仍在可接受范围内（< 5s）
 - **规则质量**：新增预设规则 MUST 经过至少 3 份真实文档验证，避免规则过严或过松导致大量误报/漏报
-- **checker.py 复杂度**：当前文件已 1323 行，新增功能应尽量模块化（可考虑提取 helper 函数），避免文件过度膨胀
+- **checker.py 重构**：当前文件已 1323 行，MUST 创建 `checker/` 子包，将现有 `checker.py` 拆分为多个模块文件（如 `property_resolver.py`、`heading_validator.py`、`base.py` 等），`checker/__init__.py` 保持对外接口不变

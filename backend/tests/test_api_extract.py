@@ -66,13 +66,13 @@ class TestExtractRulesAPI:
         assert data["detail"]["error"] == "INVALID_FILE_TYPE"
 
     async def test_extract_corrupted_file(self, client, corrupted_file):
-        """损坏文件应返回 422"""
+        """损坏文件应返回 400（魔数校验不通过）"""
         with open(corrupted_file, "rb") as f:
             resp = await client.post(
                 "/api/extract-rules",
                 files={"file": ("corrupted.docx", f, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
             )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
 
     async def test_extract_with_name(self, client, sample_docx):
         """传入自定义名称应反映在响应中"""

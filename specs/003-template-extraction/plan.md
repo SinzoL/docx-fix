@@ -11,7 +11,7 @@
 
 ## Technical Context
 
-**Language/Version**: Python ≥ 3.9（后端）、TypeScript 5.x（前端）  
+**Language/Version**: Python ≥ 3.12（后端）、TypeScript 5.x（前端）  
 **Primary Dependencies**:
 - 后端: FastAPI, python-docx, lxml, pyyaml, openai（LLM 集成，已有）
 - 前端: React 18, TDesign React v1.12.0, TailwindCSS 3.4.17, Vite

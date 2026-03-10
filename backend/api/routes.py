@@ -4,6 +4,9 @@ API 路由定义
 所有 API 端点均挂载在 /api 前缀下。
 """
 
+from __future__ import annotations
+
+import json
 import os
 import re
 import shutil
@@ -49,17 +52,7 @@ _SESSION_ID_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][
 
 
 def _validate_session_id(session_id: str) -> str:
-    """校验 session_id 格式，防止路径穿越攻击。
-
-    Args:
-        session_id: 客户端传入的 session_id
-
-    Returns:
-        校验通过的 session_id
-
-    Raises:
-        HTTPException: session_id 格式非法
-    """
+    """校验 session_id 格式，防止路径穿越攻击。"""
     if not _SESSION_ID_PATTERN.match(session_id):
         logger.warning(f"非法 session_id 被拦截: {session_id!r}")
         raise HTTPException(
@@ -73,19 +66,7 @@ def _validate_session_id(session_id: str) -> str:
 
 
 def _safe_session_dir(session_id: str) -> str:
-    """根据已校验的 session_id 构建安全的 session 目录路径。
-
-    额外做 resolve() 检查，确保最终路径确实在 TEMP_DIR 下。
-
-    Args:
-        session_id: 已通过 _validate_session_id 校验的 session_id
-
-    Returns:
-        session 目录的绝对路径
-
-    Raises:
-        HTTPException: 路径不在 TEMP_DIR 下（二次防御）
-    """
+    """根据已校验的 session_id 构建安全的 session 目录路径。"""
     session_dir = Path(TEMP_DIR) / session_id
     resolved = session_dir.resolve()
     temp_resolved = Path(TEMP_DIR).resolve()
@@ -102,21 +83,174 @@ def _safe_session_dir(session_id: str) -> str:
 
 
 def _safe_filename(filename: str) -> str:
-    """清理文件名，移除路径分隔符等危险字符。
-
-    Args:
-        filename: 客户端传入的原始文件名
-
-    Returns:
-        安全的文件名（仅保留文件名部分）
-    """
-    # 只取文件名部分（去掉任何路径前缀）
+    """清理文件名，移除路径分隔符等危险字符。"""
     safe = Path(filename).name
-    # 再次确认不包含路径分隔符
     safe = safe.replace("/", "_").replace("\\", "_").replace("..", "_")
     if not safe:
         safe = "document.docx"
     return safe
+
+
+def _touch_session(session_dir: str) -> None:
+    """#4: 更新 session 目录的 mtime，防止活跃 session 被误清理。"""
+    try:
+        os.utime(session_dir, None)
+    except OSError:
+        pass
+
+
+# ========================================
+# #10: Session 元信息 JSON 格式读写
+# ========================================
+
+def _read_session_meta(session_dir: str) -> dict:
+    """读取 session 元信息。兼容旧格式 _meta.txt 和新格式 _meta.json。"""
+    json_path = os.path.join(session_dir, "_meta.json")
+    txt_path = os.path.join(session_dir, "_meta.txt")
+
+    # 优先读取 JSON 格式
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # 兼容旧的 _meta.txt 格式
+    if os.path.exists(txt_path):
+        try:
+            with open(txt_path, "r", encoding="utf-8") as f:
+                lines = f.read().strip().split("\n")
+                meta = {"filename": lines[0] if lines else "unknown.docx"}
+                if len(lines) > 1:
+                    meta["rule_id"] = lines[1]
+                return meta
+        except OSError:
+            pass
+
+    return {}
+
+
+def _write_session_meta(session_dir: str, meta: dict) -> None:
+    """写入 session 元信息（JSON 格式）。"""
+    json_path = os.path.join(session_dir, "_meta.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+# ========================================
+# #8: 规则来源解析（统一提取）
+# ========================================
+
+class _ResolvedRules:
+    """规则解析结果，包含路径、名称和清理函数"""
+    def __init__(self, path: str, name: str, tmpfile_path: Optional[str] = None):
+        self.path = path
+        self.name = name
+        self._tmpfile_path = tmpfile_path
+
+    def cleanup(self):
+        """清理临时文件"""
+        if self._tmpfile_path and os.path.exists(self._tmpfile_path):
+            os.unlink(self._tmpfile_path)
+
+
+def _resolve_rules(rule_id: str, custom_rules_yaml: Optional[str] = None) -> _ResolvedRules:
+    """统一处理规则来源：自定义 YAML 或服务端预置规则。
+
+    当 custom_rules_yaml 非空时，写入临时 YAML 文件并返回其路径。
+    否则根据 rule_id 查找服务端预置规则。
+
+    Raises:
+        HTTPException: 规则无效或自定义规则内容无效
+    """
+    if custom_rules_yaml:
+        try:
+            os.makedirs(TEMP_DIR, exist_ok=True)
+            tmpfile = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".yaml", delete=False, dir=TEMP_DIR
+            )
+            tmpfile.write(custom_rules_yaml)
+            tmpfile.close()
+            return _ResolvedRules(path=tmpfile.name, name="自定义规则", tmpfile_path=tmpfile.name)
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse(
+                    error="INVALID_CUSTOM_RULES",
+                    message="自定义规则内容无效"
+                ).model_dump(),
+            )
+    else:
+        rules_path = get_rule_path(rule_id)
+        if rules_path is None:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse(
+                    error="INVALID_RULE",
+                    message=f"规则 '{rule_id}' 不存在"
+                ).model_dump(),
+            )
+        rule_name = rule_id
+        for r in get_rules_list():
+            if r.id == rule_id:
+                rule_name = r.name
+                break
+        return _ResolvedRules(path=rules_path, name=rule_name)
+
+
+# ========================================
+# #9: 文件上传验证（统一提取）
+# ========================================
+
+async def _validate_and_read_upload(file: UploadFile) -> bytes:
+    """统一的文件上传验证：扩展名、大小、魔数校验。
+
+    Returns:
+        文件内容字节
+
+    Raises:
+        HTTPException: 文件类型/大小/内容无效
+    """
+    # 1. 验证文件扩展名
+    if not file.filename or not file.filename.lower().endswith(".docx"):
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="INVALID_FILE_TYPE",
+                message="仅支持 .docx 格式文件"
+            ).model_dump(),
+        )
+
+    # 2. 流式读取文件并验证大小
+    content = bytearray()
+    chunk_size = 64 * 1024
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse(
+                    error="FILE_TOO_LARGE",
+                    message=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）"
+                ).model_dump(),
+            )
+    content = bytes(content)
+
+    # 3. 验证文件内容魔数
+    if len(content) < 4 or content[:4] != b"PK\x03\x04":
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="INVALID_FILE_CONTENT",
+                message="文件内容无效：不是有效的 .docx 文件（文件可能已损坏或被篡改）"
+            ).model_dump(),
+        )
+
+    return content
 
 
 # ========================================
@@ -233,94 +367,24 @@ async def check_file(
     当 custom_rules_yaml 非空时，使用该自定义 YAML 规则内容进行检查，
     忽略 rule_id 指定的服务端预置规则。
     """
-    # 1. 验证文件扩展名（轻量校验，不占信号量）
-    if not file.filename or not file.filename.lower().endswith(".docx"):
-        raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="INVALID_FILE_TYPE",
-                message="仅支持 .docx 格式文件"
-            ).model_dump(),
-        )
+    # 1. 验证文件（不占信号量）
+    content = await _validate_and_read_upload(file)
 
-    # 并发限制：限制同时处理的文件操作请求数
+    # 并发限制
     if _upload_semaphore.locked():
         logger.warning("并发上传数已达上限，拒绝新请求")
     async with _upload_semaphore:
 
-        # 2. 流式读取文件并验证大小（避免大文件一次性占满内存）
-        content = bytearray()
-        chunk_size = 64 * 1024  # 64KB 分块读取
-        while True:
-            chunk = await file.read(chunk_size)
-            if not chunk:
-                break
-            content.extend(chunk)
-            if len(content) > MAX_FILE_SIZE:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="FILE_TOO_LARGE",
-                        message=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）"
-                    ).model_dump(),
-                )
-        content = bytes(content)
+        # 2. 解析规则来源
+        resolved = _resolve_rules(rule_id, custom_rules_yaml)
 
-        # 3. 验证文件内容魔数（DOCX 本质是 ZIP 格式，前 4 字节为 PK\x03\x04）
-        if len(content) < 4 or content[:4] != b"PK\x03\x04":
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse(
-                    error="INVALID_FILE_CONTENT",
-                    message="文件内容无效：不是有效的 .docx 文件（文件可能已损坏或被篡改）"
-                ).model_dump(),
-            )
-
-        # 4. 处理规则来源（自定义 YAML 或服务端预置规则）
-        custom_rules_tmpfile = None
-        if custom_rules_yaml:
-            # 使用自定义规则：写入临时 YAML 文件
-            try:
-                custom_rules_tmpfile = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".yaml", delete=False, dir=TEMP_DIR
-                )
-                custom_rules_tmpfile.write(custom_rules_yaml)
-                custom_rules_tmpfile.close()
-                rules_path = custom_rules_tmpfile.name
-                rule_name = "自定义规则"
-            except Exception:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="INVALID_CUSTOM_RULES",
-                        message="自定义规则内容无效"
-                    ).model_dump(),
-                )
-        else:
-            # 使用服务端预置规则
-            rules_path = get_rule_path(rule_id)
-            if rules_path is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="INVALID_RULE",
-                        message=f"规则 '{rule_id}' 不存在"
-                    ).model_dump(),
-                )
-            rule_name = rule_id
-            rules_list_data = get_rules_list()
-            for r in rules_list_data:
-                if r.id == rule_id:
-                    rule_name = r.name
-                    break
-
-        # 5. 生成 session_id（如果未提供）
+        # 3. 生成 session_id（如果未提供）
         if not session_id:
             session_id = str(uuid.uuid4())
         else:
             _validate_session_id(session_id)
 
-        # 6. 保存文件到临时目录
+        # 4. 保存文件到临时目录
         safe_name = _safe_filename(file.filename)
         session_dir = _safe_session_dir(session_id)
         os.makedirs(session_dir, exist_ok=True)
@@ -328,20 +392,21 @@ async def check_file(
         with open(filepath, "wb") as f:
             f.write(content)
 
-        # 保存元信息
-        meta_path = os.path.join(session_dir, "_meta.txt")
-        with open(meta_path, "w") as f:
-            f.write(f"{safe_name}\n{rule_id}")
+        # 保存元信息（JSON 格式）
+        _write_session_meta(session_dir, {
+            "filename": safe_name,
+            "rule_id": rule_id,
+        })
 
-        # 7. 执行检查
+        # 5. 执行检查
         try:
             report = run_check(
                 filepath=filepath,
-                rules_path=rules_path,
+                rules_path=resolved.path,
                 session_id=session_id,
                 filename=safe_name,
                 rule_id=rule_id,
-                rule_name=rule_name,
+                rule_name=resolved.name,
             )
             return report
         except Exception as e:
@@ -354,9 +419,7 @@ async def check_file(
                 ).model_dump(),
             )
         finally:
-            # 清理自定义规则临时文件
-            if custom_rules_tmpfile and os.path.exists(custom_rules_tmpfile.name):
-                os.unlink(custom_rules_tmpfile.name)
+            resolved.cleanup()
 
 
 # ========================================
@@ -364,10 +427,7 @@ async def check_file(
 # ========================================
 @router.post("/recheck", response_model=CheckReport)
 async def recheck_file(request: RecheckRequest):
-    """使用已上传的文件，切换到新的规则重新执行格式检查。
-
-    前端在切换规则模板时调用此端点，无需重新上传文件。
-    """
+    """使用已上传的文件，切换到新的规则重新执行格式检查。"""
     _validate_session_id(request.session_id)
     session_dir = _safe_session_dir(request.session_id)
 
@@ -381,23 +441,15 @@ async def recheck_file(request: RecheckRequest):
             ).model_dump(),
         )
 
+    # #4: 续命 — 更新 session mtime
+    _touch_session(session_dir)
+
     # 并发限制
     async with _upload_semaphore:
 
         # 读取元信息
-        meta_path = os.path.join(session_dir, "_meta.txt")
-        if not os.path.exists(meta_path):
-            raise HTTPException(
-                status_code=404,
-                detail=ErrorResponse(
-                    error="SESSION_NOT_FOUND",
-                    message="会话元数据丢失，请重新上传文件"
-                ).model_dump(),
-            )
-
-        with open(meta_path, "r") as f:
-            lines = f.read().strip().split("\n")
-            filename = lines[0] if lines else "unknown.docx"
+        meta = _read_session_meta(session_dir)
+        filename = meta.get("filename", "unknown.docx")
 
         # 查找上传的文件
         filepath = os.path.join(session_dir, filename)
@@ -410,56 +462,22 @@ async def recheck_file(request: RecheckRequest):
                 ).model_dump(),
             )
 
-        # 处理规则来源
-        custom_rules_tmpfile = None
-        if request.custom_rules_yaml:
-            try:
-                os.makedirs(TEMP_DIR, exist_ok=True)
-                custom_rules_tmpfile = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".yaml", delete=False, dir=TEMP_DIR
-                )
-                custom_rules_tmpfile.write(request.custom_rules_yaml)
-                custom_rules_tmpfile.close()
-                rules_path = custom_rules_tmpfile.name
-                rule_name = "自定义规则"
-            except Exception:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="INVALID_CUSTOM_RULES",
-                        message="自定义规则内容无效"
-                    ).model_dump(),
-                )
-        else:
-            rules_path = get_rule_path(request.rule_id)
-            if rules_path is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="INVALID_RULE",
-                        message=f"规则 '{request.rule_id}' 不存在"
-                    ).model_dump(),
-                )
-            rule_name = request.rule_id
-            rules_list_data = get_rules_list()
-            for r in rules_list_data:
-                if r.id == request.rule_id:
-                    rule_name = r.name
-                    break
+        # 解析规则来源
+        resolved = _resolve_rules(request.rule_id, request.custom_rules_yaml)
 
         # 更新元信息中的 rule_id
-        with open(meta_path, "w") as f:
-            f.write(f"{filename}\n{request.rule_id}")
+        meta["rule_id"] = request.rule_id
+        _write_session_meta(session_dir, meta)
 
         # 执行检查
         try:
             report = run_check(
                 filepath=filepath,
-                rules_path=rules_path,
+                rules_path=resolved.path,
                 session_id=request.session_id,
                 filename=filename,
                 rule_id=request.rule_id,
-                rule_name=rule_name,
+                rule_name=resolved.name,
             )
             return report
         except Exception as e:
@@ -472,8 +490,7 @@ async def recheck_file(request: RecheckRequest):
                 ).model_dump(),
             )
         finally:
-            if custom_rules_tmpfile and os.path.exists(custom_rules_tmpfile.name):
-                os.unlink(custom_rules_tmpfile.name)
+            resolved.cleanup()
 
 
 # ========================================
@@ -483,10 +500,7 @@ async def recheck_file(request: RecheckRequest):
 async def fix_file(
     request: FixRequest,
 ):
-    """对已上传的文件执行格式修复。
-
-    当请求体中 custom_rules_yaml 非空时，使用该自定义 YAML 规则内容进行修复。
-    """
+    """对已上传的文件执行格式修复。"""
     _validate_session_id(request.session_id)
     session_dir = _safe_session_dir(request.session_id)
 
@@ -500,23 +514,15 @@ async def fix_file(
             ).model_dump(),
         )
 
+    # #4: 续命 — 更新 session mtime
+    _touch_session(session_dir)
+
     # 并发限制
     async with _upload_semaphore:
 
         # 读取元信息
-        meta_path = os.path.join(session_dir, "_meta.txt")
-        if not os.path.exists(meta_path):
-            raise HTTPException(
-                status_code=404,
-                detail=ErrorResponse(
-                    error="SESSION_NOT_FOUND",
-                    message="会话元数据丢失，请重新上传文件"
-                ).model_dump(),
-            )
-
-        with open(meta_path, "r") as f:
-            lines = f.read().strip().split("\n")
-            filename = lines[0] if lines else "unknown.docx"
+        meta = _read_session_meta(session_dir)
+        filename = meta.get("filename", "unknown.docx")
 
         # 查找上传的文件
         filepath = os.path.join(session_dir, filename)
@@ -529,53 +535,17 @@ async def fix_file(
                 ).model_dump(),
             )
 
-        # 处理规则来源（自定义 YAML 或服务端预置规则）
-        custom_rules_tmpfile = None
-        if request.custom_rules_yaml:
-            # 使用自定义规则：写入临时 YAML 文件
-            try:
-                os.makedirs(TEMP_DIR, exist_ok=True)
-                custom_rules_tmpfile = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".yaml", delete=False, dir=TEMP_DIR
-                )
-                custom_rules_tmpfile.write(request.custom_rules_yaml)
-                custom_rules_tmpfile.close()
-                rules_path = custom_rules_tmpfile.name
-                rule_name = "自定义规则"
-            except Exception:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="INVALID_CUSTOM_RULES",
-                        message="自定义规则内容无效"
-                    ).model_dump(),
-                )
-        else:
-            # 使用服务端预置规则
-            rules_path = get_rule_path(request.rule_id)
-            if rules_path is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="INVALID_RULE",
-                        message=f"规则 '{request.rule_id}' 不存在"
-                    ).model_dump(),
-                )
-            rule_name = request.rule_id
-            rules_list_data = get_rules_list()
-            for r in rules_list_data:
-                if r.id == request.rule_id:
-                    rule_name = r.name
-                    break
+        # 解析规则来源
+        resolved = _resolve_rules(request.rule_id, request.custom_rules_yaml)
 
         # 执行修复
         try:
             report = run_fix(
                 filepath=filepath,
-                rules_path=rules_path,
+                rules_path=resolved.path,
                 session_id=request.session_id,
                 filename=filename,
-                rule_name=rule_name,
+                rule_name=resolved.name,
             )
             return report
         except Exception as e:
@@ -588,9 +558,7 @@ async def fix_file(
                 ).model_dump(),
             )
         finally:
-            # 清理自定义规则临时文件
-            if custom_rules_tmpfile and os.path.exists(custom_rules_tmpfile.name):
-                os.unlink(custom_rules_tmpfile.name)
+            resolved.cleanup()
 
 
 # ========================================
@@ -611,13 +579,12 @@ async def download_fixed_file(session_id: str):
             ).model_dump(),
         )
 
+    # #4: 续命
+    _touch_session(session_dir)
+
     # 读取元信息获取文件名
-    meta_path = os.path.join(session_dir, "_meta.txt")
-    filename = "document.docx"
-    if os.path.exists(meta_path):
-        with open(meta_path, "r") as f:
-            lines = f.read().strip().split("\n")
-            filename = lines[0] if lines else "document.docx"
+    meta = _read_session_meta(session_dir)
+    filename = meta.get("filename", "document.docx")
 
     # 查找修复后的文件
     base, ext = os.path.splitext(filename)
@@ -648,53 +615,14 @@ async def extract_rules(
     file: UploadFile = File(...),
     name: str = Form(default=""),
 ):
-    """上传 .docx 模板文件，自动提取格式规则并返回 YAML 内容。
-
-    提取的 YAML 内容将直接返回给前端，由前端保存到浏览器本地存储（localStorage）中，
-    不同用户的规则互不干扰，30天后过期自动删除。
-    """
-    # 1. 验证文件扩展名（轻量校验，不占信号量）
-    if not file.filename or not file.filename.lower().endswith(".docx"):
-        raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="INVALID_FILE_TYPE",
-                message="仅支持 .docx 格式文件"
-            ).model_dump(),
-        )
+    """上传 .docx 模板文件，自动提取格式规则并返回 YAML 内容。"""
+    # 1. 验证文件（使用公共函数）
+    content = await _validate_and_read_upload(file)
 
     # 并发限制
     async with _upload_semaphore:
 
-        # 2. 流式读取文件并验证大小（避免大文件一次性占满内存）
-        content = bytearray()
-        chunk_size = 64 * 1024  # 64KB 分块读取
-        while True:
-            chunk = await file.read(chunk_size)
-            if not chunk:
-                break
-            content.extend(chunk)
-            if len(content) > MAX_FILE_SIZE:
-                raise HTTPException(
-                    status_code=400,
-                    detail=ErrorResponse(
-                        error="FILE_TOO_LARGE",
-                        message=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）"
-                    ).model_dump(),
-                )
-        content = bytes(content)
-
-        # 3. 验证文件内容魔数（DOCX 本质是 ZIP 格式，前 4 字节为 PK\x03\x04）
-        if len(content) < 4 or content[:4] != b"PK\x03\x04":
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse(
-                    error="INVALID_FILE_CONTENT",
-                    message="文件内容无效：不是有效的 .docx 文件（文件可能已损坏或被篡改）"
-                ).model_dump(),
-            )
-
-        # 4. 保存文件到临时目录
+        # 2. 保存文件到临时目录
         session_id = str(uuid.uuid4())
         session_dir = _safe_session_dir(session_id)
         os.makedirs(session_dir, exist_ok=True)
@@ -703,7 +631,7 @@ async def extract_rules(
         with open(filepath, "wb") as f:
             f.write(content)
 
-        # 5. 执行提取
+        # 3. 执行提取
         try:
             result = run_extract(
                 filepath=filepath,
@@ -711,7 +639,7 @@ async def extract_rules(
                 description=None,
             )
 
-            # 空白模板检查：如果没有检测到任何有效格式规则
+            # 空白模板检查
             raw_summary = result.get("summary", {})
             has_any = any([
                 raw_summary.get("has_page_setup"),
@@ -767,5 +695,5 @@ async def extract_rules(
                 ).model_dump(),
             )
         finally:
-            # 清理临时文件（提取完成后不需要保留）
+            # 清理临时文件
             shutil.rmtree(session_dir, ignore_errors=True)

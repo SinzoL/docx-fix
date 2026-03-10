@@ -28,6 +28,8 @@ function App() {
   const [fixLoading, setFixLoading] = useState(false);
   /** 当前选中的自定义规则 YAML 内容（选择自定义规则时有值） */
   const [customRulesYaml, setCustomRulesYaml] = useState<string | undefined>(undefined);
+  /** #13: 是否为只读模式（查看历史报告时启用） */
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   // 初始化：清理过期缓存
   useEffect(() => {
@@ -51,6 +53,7 @@ function App() {
     setFixReport(null);
     setFixLoading(false);
     setCustomRulesYaml(undefined);
+    setIsReadOnly(false);
   }, []);
 
   // 检查开始回调（UploadPanel 内部已经做了状态管理）
@@ -63,6 +66,7 @@ function App() {
     (report: CheckReport, sid: string) => {
       setCheckReport(report);
       setSessionId(sid);
+      setIsReadOnly(false);
       setAppState("REPORT_READY");
 
       // 缓存检查记录到 IndexedDB
@@ -84,9 +88,9 @@ function App() {
     setAppState("IDLE");
   }, []);
 
-  // 一键修复
+  // 一键修复（#5: 增加防抖保护，fixLoading 为 true 时忽略重复调用）
   const handleFix = useCallback(async () => {
-    if (!sessionId || !selectedRuleId) return;
+    if (!sessionId || !selectedRuleId || fixLoading) return;
 
     setFixLoading(true);
     setAppState("FIXING");
@@ -109,7 +113,7 @@ function App() {
     } finally {
       setFixLoading(false);
     }
-  }, [sessionId, selectedRuleId, customRulesYaml]);
+  }, [sessionId, selectedRuleId, customRulesYaml, fixLoading]);
 
   // 下载完成回调
   const handleDownloadComplete = useCallback(() => {
@@ -131,11 +135,13 @@ function App() {
     setSelectedRuleId(ruleId);
   }, []);
 
-  // 查看历史报告回调
+  // 查看历史报告回调（#13: 历史报告设为只读模式）
   const handleViewHistoryReport = useCallback((report: CheckReport) => {
     setCheckReport(report);
     setSessionId(report.session_id);
     setSelectedRuleId(report.rule_id);
+    setIsReadOnly(true);
+    setCustomRulesYaml(undefined);
     setAppState("REPORT_READY");
   }, []);
 
@@ -210,7 +216,7 @@ function App() {
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <SvgIcon name="scan-extract" size={16} /> 提取模板
+                  <SvgIcon name="scan-extract" size={16} /> 提取规则
                 </button>
               </div>
             </div>
@@ -226,6 +232,7 @@ function App() {
                   onRuleChange={handleRuleChange}
                   customRulesYaml={customRulesYaml}
                   onCustomRulesYamlChange={setCustomRulesYaml}
+                  onGoToExtract={() => setActiveTab("extract")}
                 />
                 <div className="mt-8">
                   <HistoryList onViewReport={handleViewHistoryReport} />
@@ -263,6 +270,9 @@ function App() {
               fixLoading={fixLoading}
               sessionId={sessionId}
               onRecheck={handleRecheck}
+              readOnly={isReadOnly}
+              customRulesYaml={customRulesYaml}
+              onCustomRulesYamlChange={setCustomRulesYaml}
             />
           </div>
         )}

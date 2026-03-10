@@ -26,8 +26,8 @@ const mockFixReport: FixReport = {
     { category: "字体", description: "修复中文字体为宋体" },
     { category: "页面设置", description: "修复页边距" },
   ],
-  before_summary: { pass: 5, warn: 1, fail: 3 },
-  after_summary: { pass: 8, warn: 1, fail: 0 },
+  before_summary: { pass_count: 5, warn: 1, fail: 3 },
+  after_summary: { pass_count: 8, warn: 1, fail: 0 },
   changed_items: [
     {
       category: "字体",

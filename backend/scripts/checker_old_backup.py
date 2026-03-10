@@ -87,7 +87,7 @@ class DocxChecker:
 
         # 加载规则
         if rules_path is None:
-            rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "rules", "hit_midterm_report.yaml")
+            rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "rules", "default.yaml")
         with open(rules_path, 'r', encoding='utf-8') as f:
             self.rules = yaml.safe_load(f)
 

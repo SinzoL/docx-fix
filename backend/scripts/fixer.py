@@ -29,6 +29,8 @@ FONT_ALIASES = {
     'SimSun': '宋体', '宋体': '宋体',
     'STXinwei': '华文新魏', '华文新魏': '华文新魏',
     'STKaiti': '华文楷体', '华文楷体': '华文楷体',
+    'STSong': '华文宋体', '华文宋体': '华文宋体',
+    'STFangsong': '华文仿宋', '华文仿宋': '华文仿宋',
     'KaiTi': '楷体', '楷体': '楷体',
     'FangSong': '仿宋', '仿宋': '仿宋',
     'Microsoft YaHei': '微软雅黑', '微软雅黑': '微软雅黑',
@@ -51,7 +53,7 @@ class DocxFixer:
         self.dry_run = False
 
         if rules_path is None:
-            rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "rules", "hit_midterm_report.yaml")
+            rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "rules", "default.yaml")
         with open(rules_path, 'r', encoding='utf-8') as f:
             self.rules = yaml.safe_load(f)
 

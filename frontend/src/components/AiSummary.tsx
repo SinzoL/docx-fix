@@ -68,24 +68,20 @@ export default function AiSummary({ report }: AiSummaryProps) {
     });
   }, [report]);
 
-  // 检查报告加载完成后自动开始 AI 总结
+  // #15: 挂载时仅检查缓存，不自动发起 SSE（节省 token）
   useEffect(() => {
     if (!requestedRef.current) {
       requestedRef.current = true;
       // 优先检查缓存
       const cached = getCachedSummary(report.session_id);
       if (cached) {
-        // 缓存命中：通过 queueMicrotask 避免在 effect 中直接同步 setState
+        // 缓存命中：直接展示
         queueMicrotask(() => {
           setContent(cached);
           setState("done");
         });
-      } else {
-        // 缓存未命中：正常发起 SSE
-        queueMicrotask(() => {
-          startSummarize();
-        });
       }
+      // 缓存未命中：保持 idle 状态，等用户手动点击
     }
 
     return () => {
@@ -93,8 +89,30 @@ export default function AiSummary({ report }: AiSummaryProps) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 空状态：不渲染
-  if (state === "idle") return null;
+  // 空状态：显示手动触发按钮（#15: 不再自动请求 AI）
+  if (state === "idle") {
+    return (
+      <div className="relative overflow-hidden glass-card rounded-2xl p-6 mb-8 border border-blue-200/50 shadow-lg shadow-blue-500/5">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-purple-50/80 pointer-events-none"></div>
+        <div className="relative z-10 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+              <SvgIcon name="sparkles" size={16} />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 font-display bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700">
+              AI 深度诊断分析
+            </h3>
+          </div>
+          <button
+            onClick={startSummarize}
+            className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl hover:from-blue-400 hover:to-indigo-400 shadow-md hover:shadow-blue-500/30 transition-all cursor-pointer flex items-center gap-2"
+          >
+            <SvgIcon name="sparkles" size={14} /> 生成 AI 总结
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden glass-card rounded-2xl p-6 mb-8 border border-blue-200/50 shadow-lg shadow-blue-500/5">
