@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 全局样式 */
+@layer base {
+  body {
+    @apply m-0 min-h-screen font-sans bg-slate-50 text-slate-800 antialiased;
+  }
+}
+
+/* 覆盖 TDesign 的一些默认样式，使其更符合现代设计规范 */
+:root {
+  --td-brand-color: #3b82f6;
+  --td-brand-color-hover: #2563eb;
+  --td-brand-color-active: #1d4ed8;
+  --td-font-family: 'Inter', system-ui, sans-serif;
+  --td-radius-medium: 0.5rem;
+  --td-radius-large: 0.75rem;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Glassmorphism utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+}
+
+/* 覆盖 TDesign Upload 拖拽区域的固定尺寸，使其自适应容器 */
+.t-upload__dragger {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 120px;
+  border: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+/* 确保 Upload 根容器也撑满宽度 */
+.t-upload {
+  width: 100%;
+}
+
+.t-upload__dragger-center {
+  width: 100%;
+}
