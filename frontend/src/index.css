@@ -61,12 +61,24 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 6px rgba(59, 130, 246, 0.08) !important;
 }
 
-/* 弹出层选项样式 */
+/* 弹出层选项样式 — 关键：允许自动高度以容纳多行内容 */
 .rule-select-popup .t-select-option {
   border-radius: 8px !important;
   margin: 2px 0 !important;
-  padding: 6px 10px !important;
+  padding: 8px 10px !important;
+  height: auto !important;
+  min-height: 40px !important;
+  line-height: normal !important;
+  white-space: normal !important;
+  overflow: visible !important;
   transition: all 0.15s ease !important;
+}
+
+/* 内部文字容器也解除高度限制 */
+.rule-select-popup .t-select-option .t-select-option__content {
+  height: auto !important;
+  overflow: visible !important;
+  white-space: normal !important;
 }
 
 .rule-select-popup .t-select-option:hover {
@@ -76,6 +88,7 @@
 .rule-select-popup .t-select-option.t-is-selected {
   background: linear-gradient(135deg, rgba(219, 234, 254, 0.8), rgba(224, 231, 255, 0.6)) !important;
   font-weight: 600 !important;
+  position: relative;
 }
 
 .rule-select-popup .t-select-option.t-is-selected::after {
