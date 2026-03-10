@@ -314,8 +314,44 @@ function App() {
       </main>
 
       {/* 页脚 */}
-      <footer className="relative z-10 text-center py-8 text-sm text-slate-400 font-medium">
-        <p>docx-fix · 智能驱动的文档格式检查与修复工具</p>
+      <footer className="relative z-10 border-t border-slate-200/50 mt-8">
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          {/* 隐私安全声明 */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6 p-4 bg-white/60 backdrop-blur-sm rounded-xl border border-slate-200/50">
+            <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <SvgIcon name="shield-check" size={18} className="text-emerald-500" />
+            </div>
+            <div className="text-sm text-slate-500 leading-relaxed">
+              <span className="font-semibold text-slate-600">隐私保护承诺</span>
+              <span className="mx-1.5 text-slate-300">|</span>
+              您上传的论文文档和模板文件仅在处理期间临时使用，完成后立即从服务器删除；自定义规则仅存储在您的浏览器本地，不会上传至服务器。我们不会收集、存储或分享您的任何文件内容。
+            </div>
+          </div>
+
+          {/* 底部信息栏 */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-400">
+            <p className="font-medium">DocxFix AI · 智能驱动的文档格式检查与修复工具</p>
+            <div className="flex items-center gap-5">
+              <a
+                href="https://github.com/SinzoL/docx-fix"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <SvgIcon name="github" size={16} />
+                <span>GitHub</span>
+                <SvgIcon name="external-link" size={12} className="opacity-50" />
+              </a>
+              <a
+                href="mailto:3013749951@qq.com"
+                className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <SvgIcon name="mail" size={16} />
+                <span>3013749951@qq.com</span>
+              </a>
+            </div>
+          </div>
+        </div>
       </footer>
     </div>
   );
