@@ -34,6 +34,7 @@ from scripts.checker.text_convention_checker import (
     _FULLWIDTH_SPACE,
     _DUPLICATE_PUNCT_RE,
 )
+from scripts.checker.text_convention.spacing_checks import is_intentional_spaced_text
 
 
 # ============================================================
@@ -272,12 +273,13 @@ def run_text_convention_fixes(
                 para_descriptions.extend(descs)
 
         if not is_code:
-            # 2. 中文之间多余空格（仅 CJK 段落）
+            # 2. 中文之间多余空格（仅 CJK 段落，排除设计性均匀间隔）
             if is_cjk_para and tc_rules.get('extra_spaces_in_chinese', {}).get('enabled', True):
-                fixed, descs = _fix_extra_spaces_in_chinese(current_text)
-                if descs:
-                    current_text = fixed
-                    para_descriptions.extend(descs)
+                if not is_intentional_spaced_text(current_text):
+                    fixed, descs = _fix_extra_spaces_in_chinese(current_text)
+                    if descs:
+                        current_text = fixed
+                        para_descriptions.extend(descs)
 
             # 3. 全角空格 → 半角（在合并空格之前处理）
             if tc_rules.get('fullwidth_space', {}).get('enabled', True):
@@ -286,12 +288,13 @@ def run_text_convention_fixes(
                     current_text = fixed
                     para_descriptions.extend(descs)
 
-            # 4. 连续多个空格 → 合并
+            # 4. 连续多个空格 → 合并（排除设计性均匀间隔）
             if tc_rules.get('consecutive_spaces', {}).get('enabled', True):
-                fixed, descs = _fix_consecutive_spaces(current_text)
-                if descs:
-                    current_text = fixed
-                    para_descriptions.extend(descs)
+                if not is_intentional_spaced_text(current_text):
+                    fixed, descs = _fix_consecutive_spaces(current_text)
+                    if descs:
+                        current_text = fixed
+                        para_descriptions.extend(descs)
 
             # 5. 行首/行尾空格（最后处理）
             if tc_rules.get('leading_trailing_spaces', {}).get('enabled', True):

@@ -30,6 +30,7 @@ from .spacing_checks import (
     check_fullwidth_space,
     count_cjk_english_spacing,
     mark_cjk_spacing_disputes,
+    is_intentional_spaced_text,
 )
 from .constants import (
     DUPLICATE_PUNCT_RE,
@@ -55,6 +56,7 @@ __all__ = [
     'check_extra_spaces_in_chinese', 'check_consecutive_spaces',
     'check_leading_trailing_spaces', 'check_fullwidth_space',
     'count_cjk_english_spacing', 'mark_cjk_spacing_disputes',
+    'is_intentional_spaced_text',
     # 调度器
     'run_text_convention_checks', 'default_text_conventions',
     # 底层常量和函数（供外部模块兼容使用）

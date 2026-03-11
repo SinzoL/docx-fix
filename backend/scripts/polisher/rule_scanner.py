@@ -40,6 +40,7 @@ from scripts.checker.text_convention_checker import (
     _MULTI_SPACE_RE,
     _FULLWIDTH_SPACE,
 )
+from scripts.checker.text_convention.spacing_checks import is_intentional_spaced_text
 from scripts.polisher.text_extractor import ParagraphSnapshot
 
 logger = logging.getLogger(__name__)
@@ -184,13 +185,15 @@ class RuleScanner:
                 issues.extend(_check_duplicate_punctuation(para_info, masked_text))
 
             if not is_code:
-                # 2. 中文之间多余空格
+                # 2. 中文之间多余空格（排除设计性均匀间隔）
                 if is_cjk_para and tc_rules.get('extra_spaces_in_chinese', {}).get('enabled', True):
-                    issues.extend(_check_extra_spaces_in_chinese(para_info, masked_text))
+                    if not is_intentional_spaced_text(text):
+                        issues.extend(_check_extra_spaces_in_chinese(para_info, masked_text))
 
-                # 3. 连续多个空格
+                # 3. 连续多个空格（排除设计性均匀间隔）
                 if tc_rules.get('consecutive_spaces', {}).get('enabled', True):
-                    issues.extend(_check_consecutive_spaces(para_info, masked_text))
+                    if not is_intentional_spaced_text(text):
+                        issues.extend(_check_consecutive_spaces(para_info, masked_text))
 
                 # 4. 行首/行尾空格
                 if tc_rules.get('leading_trailing_spaces', {}).get('enabled', True):

@@ -2,8 +2,8 @@
 文本排版检查 — 空格检查
 
 包含：
-- 中文之间多余空格
-- 连续多个空格
+- 中文之间多余空格（排除设计性均匀间隔）
+- 连续多个空格（排除设计性均匀间隔）
 - 行首/行尾空格
 - 全角空格混入
 - 中英文间距统计与争议标记
@@ -11,11 +11,69 @@
 
 from __future__ import annotations
 
+import re
+
 from scripts.checker.base import CheckResult
 
 from .constants import CJK_SPACE_CJK_RE, MULTI_SPACE_RE, FULLWIDTH_SPACE, CJK_IDEO_RE
 from .models import ParagraphInfo, TextIssue, DocumentStats
 from .paragraph_iter import context_snippet, cjk_ratio, mask_urls
+
+
+# ============================================================
+# 设计性均匀间隔文本检测
+# ============================================================
+
+# 匹配「字 字 字 字」模式：单个CJK字 + (空格 + 单个CJK字)×至少1次
+_UNIFORM_SPACED_CJK_RE = re.compile(
+    r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]'
+    r'(?:\s+[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]){1,}'
+)
+
+
+def is_intentional_spaced_text(text: str, max_chars: int = 15) -> bool:
+    """判断一段文本是否为设计性均匀间隔的中文短文本。
+
+    典型案例：
+    - 「指 导 教 师」「日 期」「摘 要」
+    - 表头中的「成 绩」「评 语」
+
+    判定逻辑：
+    1. 去除首尾空格后，文本整体匹配「CJK(空格+CJK)+」模式
+    2. 去掉空格后的纯中文字符数 ≤ max_chars（默认15字）
+    3. 所有间隔空格宽度一致（均匀间隔）
+
+    Args:
+        text: 待检测文本（整段或子串）
+        max_chars: 去掉空格后的中文字符数上限
+
+    Returns:
+        True 表示很可能是设计性间隔，不应自动修复
+    """
+    stripped = text.strip()
+    if not stripped:
+        return False
+
+    # 必须整段匹配「CJK(空格CJK)+」模式
+    m = _UNIFORM_SPACED_CJK_RE.fullmatch(stripped)
+    if not m:
+        return False
+
+    # 提取纯中文部分，检查长度
+    chars_only = re.sub(r'\s+', '', stripped)
+    if len(chars_only) > max_chars:
+        return False
+
+    # 至少2个中文字符才算「间隔」
+    if len(chars_only) < 2:
+        return False
+
+    # 检查所有间隔宽度是否一致
+    gaps = re.findall(r'\s+', stripped)
+    if gaps and len(set(len(g) for g in gaps)) == 1:
+        return True
+
+    return False
 
 
 # ============================================================
@@ -26,7 +84,11 @@ def check_extra_spaces_in_chinese(
     para_info: ParagraphInfo,
     text: str,
 ) -> list[TextIssue]:
-    """检查中文之间多余空格"""
+    """检查中文之间多余空格（排除设计性均匀间隔文本）"""
+    # 如果整段是设计性均匀间隔，直接跳过
+    if is_intentional_spaced_text(text):
+        return []
+
     issues = []
 
     for m in CJK_SPACE_CJK_RE.finditer(text):
@@ -55,7 +117,11 @@ def check_consecutive_spaces(
     para_info: ParagraphInfo,
     text: str,
 ) -> list[TextIssue]:
-    """检查连续多个空格"""
+    """检查连续多个空格（排除设计性均匀间隔文本）"""
+    # 如果整段是设计性均匀间隔，直接跳过
+    if is_intentional_spaced_text(text):
+        return []
+
     issues = []
 
     for m in MULTI_SPACE_RE.finditer(text):
