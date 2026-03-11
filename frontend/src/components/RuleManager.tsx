@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { Dialog, Input, MessagePlugin } from "tdesign-react";
+import { Dialog, Input, MessagePlugin, Tooltip } from "tdesign-react";
 import {
   getAll,
   remove,
@@ -235,27 +235,30 @@ export default function RuleManager({ onRulesChange }: RuleManagerProps) {
                   className="flex items-center gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <button
-                    onClick={() => openRename(rule)}
-                    className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
-                    title="重命名"
-                  >
-                    <SvgIcon name="wrench" size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleDownload(rule)}
-                    className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-                    title="下载 YAML"
-                  >
-                    <SvgIcon name="folder" size={14} />
-                  </button>
-                  <button
-                    onClick={() => openDelete(rule)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                    title="删除"
-                  >
-                    <SvgIcon name="x-circle" size={14} />
-                  </button>
+                  <Tooltip content="重命名" placement="top" showArrow>
+                    <button
+                      onClick={() => openRename(rule)}
+                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
+                    >
+                      <SvgIcon name="pencil" size={14} />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="下载 YAML 文件" placement="top" showArrow>
+                    <button
+                      onClick={() => handleDownload(rule)}
+                      className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                    >
+                      <SvgIcon name="download" size={14} />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="删除规则" placement="top" showArrow>
+                    <button
+                      onClick={() => openDelete(rule)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                    >
+                      <SvgIcon name="trash" size={14} />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
 

@@ -2,8 +2,9 @@
 格式检查 API 路由
 
 提供文档格式检查端点：
-- POST /check   — 上传文件并执行格式检查
-- POST /recheck — 使用已上传文件切换规则重新检查
+- POST /check                        — 上传文件并执行格式检查
+- POST /recheck                      — 使用已上传文件切换规则重新检查
+- GET  /check/session/{id}/status    — 查询 session 是否仍然存活
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 
-from api.schemas import CheckReport, RecheckRequest, ErrorResponse
+from api.schemas import CheckReport, RecheckRequest, ErrorResponse, CheckSessionStatusSchema
 from api._helpers import (
     validate_session_id,
     safe_session_dir,
@@ -179,3 +180,41 @@ async def recheck_file(request: RecheckRequest):
             )
         finally:
             resolved.cleanup()
+
+
+# ========================================
+# GET /check/session/{session_id}/status — 查询 session 是否存活
+# ========================================
+@check_router.get(
+    "/check/session/{session_id}/status",
+    response_model=CheckSessionStatusSchema,
+)
+async def check_session_status(session_id: str):
+    """查询检查 session 是否仍然存在，用于前端从历史记录恢复时判断是否可继续修复。
+
+    同时会 touch session 目录，延长其生命周期（心跳续命）。
+    """
+    validate_session_id(session_id)
+    session_dir = safe_session_dir(session_id)
+
+    if not os.path.exists(session_dir):
+        return CheckSessionStatusSchema(exists=False)
+
+    # 读取元信息
+    meta = read_session_meta(session_dir)
+    filename = meta.get("filename", "")
+    rule_id = meta.get("rule_id", "")
+
+    # 验证原始文件是否还存在
+    filepath = os.path.join(session_dir, filename) if filename else ""
+    if not filepath or not os.path.exists(filepath):
+        return CheckSessionStatusSchema(exists=False)
+
+    # 续命 — 更新 mtime，防止被清理任务删除
+    touch_session(session_dir)
+
+    return CheckSessionStatusSchema(
+        exists=True,
+        filename=filename,
+        rule_id=rule_id,
+    )

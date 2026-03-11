@@ -344,3 +344,14 @@ class PolishSessionStatusSchema(BaseModel):
     exists: bool
     applied: bool = False
     filename: str = ""
+
+
+# ========================================
+# 检查 Session 状态
+# ========================================
+
+class CheckSessionStatusSchema(BaseModel):
+    """GET /api/check/session/{session_id}/status 响应"""
+    exists: bool
+    filename: str = ""
+    rule_id: str = ""
