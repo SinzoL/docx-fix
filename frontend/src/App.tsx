@@ -3,27 +3,60 @@
  *
  * 设计模式：自定义 Hook 分域 + 顶层状态编排
  *
- * 状态机：IDLE → UPLOADING → CHECKING → REPORT_READY → FIXING → FIX_PREVIEW → DOWNLOADED
+ * 三模块统一流程：
+ * - 检查：IDLE → UPLOADING → CHECKING → REPORT_READY → FIXING → FIX_PREVIEW → DOWNLOADED
+ * - 提取：IDLE → EXTRACTING → EXTRACT_RESULT
+ * - 润色：IDLE → POLISHING → POLISH_PREVIEW → POLISH_APPLYING → POLISH_DONE
  *
- * 检查/修复逻辑委托给 useCheckFlow Hook，App 仅负责：
+ * 各模块业务逻辑分别委托给 useCheckFlow / useExtractFlow / usePolishFlow Hook，
+ * App 仅负责：
  * - 顶层 appState 状态机
  * - Tab 导航
  * - 初始化（清理缓存、规则同步）
- * - 布局和路由级渲染
+ * - 全屏布局渲染
+ * - 返回/中断确认
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { DialogPlugin } from "tdesign-react";
 import type { AppState } from "./types";
-import { cleanExpired, cleanExpiredPolish } from "./services/cache";
+import { cleanExpired, cleanExpiredPolish, cleanExpiredExtract } from "./services/cache";
 import { init as initRuleStorage, startCrossTabSync } from "./services/ruleStorage";
 import { useCheckFlow } from "./hooks/useCheckFlow";
+import { useExtractFlow } from "./hooks/useExtractFlow";
+import { usePolishFlow } from "./hooks/usePolishFlow";
 import UploadPanel from "./components/UploadPanel";
-import ExtractPanel from "./components/ExtractPanel";
+import ExtractUploadPanel from "./components/ExtractUploadPanel";
+import ExtractResultView from "./components/ExtractResult";
+import ExtractHistoryList from "./components/ExtractHistoryList";
+import RuleManager from "./components/RuleManager";
 import CheckReportView from "./components/CheckReport";
 import FixPreview from "./components/FixPreview";
 import HistoryList from "./components/HistoryList";
-import PolishPanel from "./components/PolishPanel";
+import PolishUploadPanel from "./components/PolishUploadPanel";
+import PolishProgress from "./components/PolishProgress";
+import PolishPreview from "./components/PolishPreview";
+import PolishHistoryList from "./components/PolishHistoryList";
+import FullscreenLoading from "./components/FullscreenLoading";
+import FullscreenDone from "./components/FullscreenDone";
 import { SvgIcon } from "./components/icons/SvgIcon";
+
+/** 状态 → 所属 Tab 映射，用于返回时自动定位到正确 Tab */
+const stateToTab: Record<AppState, "check" | "extract" | "polish"> = {
+  IDLE: "check",
+  UPLOADING: "check",
+  CHECKING: "check",
+  REPORT_READY: "check",
+  FIXING: "check",
+  FIX_PREVIEW: "check",
+  DOWNLOADED: "check",
+  EXTRACTING: "extract",
+  EXTRACT_RESULT: "extract",
+  POLISHING: "polish",
+  POLISH_PREVIEW: "polish",
+  POLISH_APPLYING: "polish",
+  POLISH_DONE: "polish",
+};
 
 function App() {
   const [appState, setAppState] = useState<AppState>("IDLE");
@@ -31,6 +64,12 @@ function App() {
 
   // 检查/修复流程 — 委托自定义 Hook 管理
   const check = useCheckFlow(setAppState);
+
+  // 提取流程 — 委托自定义 Hook 管理
+  const extract = useExtractFlow(setAppState);
+
+  // 润色流程 — 委托自定义 Hook 管理
+  const polish = usePolishFlow(setAppState);
 
   // 初始化：清理过期缓存 + 规则同步
   useEffect(() => {
@@ -40,16 +79,52 @@ function App() {
     cleanExpiredPolish().then((count) => {
       if (count > 0) console.log(`已清理 ${count} 条过期润色缓存`);
     });
+    cleanExpiredExtract().then((count) => {
+      if (count > 0) console.log(`已清理 ${count} 条过期提取缓存`);
+    });
     initRuleStorage();
     const stopSync = startCrossTabSync();
     return () => stopSync();
   }, []);
 
-  // 重置到初始状态
+  // 重置到初始状态（自动定位到触发该流程的模块 Tab）
+  // 润色进行中返回 → 弹确认对话框
   const handleReset = useCallback(() => {
+    if (polish.isPolishing) {
+      const d = DialogPlugin.confirm({
+        header: "确认离开",
+        body: "润色正在进行中，离开后未完成的进度不会保存。确定离开？",
+        confirmBtn: "确认离开",
+        cancelBtn: "继续润色",
+        onConfirm: () => {
+          polish.abort();
+          polish.reset();
+          setActiveTab(stateToTab[appState]);
+          setAppState("IDLE");
+          d.hide();
+        },
+        onCancel: () => {
+          d.hide();
+        },
+        onClose: () => {
+          d.hide();
+        },
+      });
+      return;
+    }
+    setActiveTab(stateToTab[appState]);
     setAppState("IDLE");
     check.reset();
-  }, [check]);
+    extract.reset();
+    polish.reset();
+  }, [appState, check, extract, polish]);
+
+  // 按需触发润色 IndexedDB 恢复（仅在润色 Tab 可见 + IDLE 时）
+  useEffect(() => {
+    if (activeTab === "polish" && appState === "IDLE") {
+      polish.triggerRestore();
+    }
+  }, [activeTab, appState, polish]);
 
   return (
     <div className="min-h-screen bg-slate-50 relative overflow-hidden font-sans">
@@ -155,28 +230,41 @@ function App() {
             </div>
 
             <div style={{ display: activeTab === "extract" ? "block" : "none" }}>
-              <ExtractPanel />
+              <ExtractUploadPanel
+                onExtractStart={extract.handleExtractStart}
+                onExtractComplete={extract.handleExtractComplete}
+                onExtractError={extract.handleExtractError}
+                ruleManagerKey={extract.ruleManagerKey}
+                onRuleManagerChange={extract.refreshRuleManager}
+              />
+              <div className="mt-8">
+                <ExtractHistoryList
+                  onViewResult={extract.handleViewHistory}
+                  refreshKey={extract.historyRefreshKey}
+                />
+              </div>
             </div>
 
             <div style={{ display: activeTab === "polish" ? "block" : "none" }}>
-              <PolishPanel />
+              <PolishUploadPanel onStartPolish={polish.handleStartPolish} />
+              <div className="mt-8">
+                <PolishHistoryList
+                  onViewResult={polish.handleViewHistory}
+                  refreshKey={polish.historyRefreshKey}
+                />
+              </div>
             </div>
           </div>
         )}
 
         {/* CHECKING 状态 — 显示加载中 */}
         {appState === "CHECKING" && (
-          <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg mx-auto mt-8 animate-in fade-in zoom-in-95 duration-500">
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6">
-              <div className="absolute inset-0 border-4 border-blue-100 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl"><SvgIcon name="search" size={24} /></div>
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-800 font-display">正在深度分析文档...</h3>
-            <p className="text-sm sm:text-base text-slate-500 mt-2 sm:mt-3 font-medium">
-              这可能需要几秒钟，AI 正在比对各项规则
-            </p>
-          </div>
+          <FullscreenLoading
+            color="blue"
+            icon="search"
+            title="正在深度分析文档..."
+            subtitle="这可能需要几秒钟，AI 正在比对各项规则"
+          />
         )}
 
         {/* REPORT_READY 状态 — 显示检查报告 */}
@@ -197,17 +285,12 @@ function App() {
 
         {/* FIXING 状态 — 修复中 */}
         {appState === "FIXING" && (
-          <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg mx-auto mt-8 animate-in fade-in zoom-in-95 duration-500">
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6">
-              <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl"><SvgIcon name="sparkles" size={24} /></div>
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-800 font-display">正在魔法修复格式...</h3>
-            <p className="text-sm sm:text-base text-slate-500 mt-2 sm:mt-3 font-medium">
-              即将完成，让您的文档焕然一新
-            </p>
-          </div>
+          <FullscreenLoading
+            color="emerald"
+            icon="sparkles"
+            title="正在魔法修复格式..."
+            subtitle="即将完成，让您的文档焕然一新"
+          />
         )}
 
         {/* FIX_PREVIEW 状态 — 修复预览 */}
@@ -223,21 +306,102 @@ function App() {
 
         {/* DOWNLOADED 状态 */}
         {appState === "DOWNLOADED" && (
-          <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg mx-auto mt-8 animate-in fade-in zoom-in-95 duration-500">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-tr from-green-400 to-emerald-500 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-6 sm:mb-8 animate-bounce">
-              <span className="text-3xl sm:text-4xl text-white"><SvgIcon name="check" size={36} /></span>
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2 sm:mb-3 font-display">大功告成！</h3>
-            <p className="text-base sm:text-lg text-slate-600">
-              修复后的完美文档已下载到本地
-            </p>
-            <button
-              onClick={handleReset}
-              className="mt-8 px-8 py-3 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
+          <FullscreenDone
+            title="大功告成！"
+            subtitle="修复后的完美文档已下载到本地"
+            buttonText="检查新文档"
+            onReset={handleReset}
+          />
+        )}
+
+        {/* EXTRACTING 状态 — 提取中 */}
+        {appState === "EXTRACTING" && (
+          <FullscreenLoading
+            color="violet"
+            icon="scan-extract"
+            title="正在分析模板文档..."
+            subtitle="正在提取格式规则"
+          />
+        )}
+
+        {/* EXTRACT_RESULT 状态 — 提取结果全屏 */}
+        {appState === "EXTRACT_RESULT" && extract.extractResult && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 mt-4 sm:mt-6">
+            <ExtractResultView
+              result={extract.extractResult}
+              ruleName={extract.ruleName}
+              onRuleNameChange={extract.setRuleName}
+              onDownload={extract.handleDownload}
+              onSave={extract.handleSave}
+              saveDialogVisible={extract.saveDialogVisible}
+              onSaveDialogVisibleChange={extract.setSaveDialogVisible}
             >
-              检查新文档
-            </button>
+              <RuleManager key={`result-${extract.ruleManagerKey}`} />
+            </ExtractResultView>
           </div>
+        )}
+
+        {/* POLISHING 状态 — 润色中（全屏进度） */}
+        {appState === "POLISHING" && (
+          <div className="glass-card rounded-2xl overflow-hidden shadow-xl shadow-violet-500/5 border border-white/60 max-w-2xl mx-auto mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-gradient-to-br from-white/60 to-violet-50/40 p-6 sm:p-8 text-center">
+              <div className="relative mx-auto w-16 h-16 mb-4">
+                <div className="absolute inset-0 rounded-full border-4 border-violet-100 animate-spin" style={{ borderTopColor: 'rgb(139, 92, 246)' }}></div>
+                <div className="absolute inset-2 rounded-full bg-violet-50 flex items-center justify-center">
+                  <SvgIcon name="sparkles" size={24} className="text-violet-500" />
+                </div>
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 font-display mb-1">正在润色文档...</h3>
+              <p className="text-sm text-slate-500">AI 正在逐段分析文档内容</p>
+            </div>
+            <PolishProgress
+              progress={polish.progress}
+              totalParagraphs={polish.totalParagraphs}
+              polishableParagraphs={polish.polishableParagraphs}
+              suggestions={polish.suggestions}
+            />
+          </div>
+        )}
+
+        {/* POLISH_PREVIEW 状态 — 润色预览全屏 */}
+        {appState === "POLISH_PREVIEW" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 mt-4 sm:mt-6">
+            <PolishPreview
+              suggestions={polish.suggestions}
+              summary={polish.summary}
+              onApply={polish.handleApplyAndDownload}
+              applying={false}
+              sessionId={polish.sessionId}
+              initialDecisions={polish.initialDecisions}
+              readOnly={polish.isReadOnly}
+              sessionExpired={polish.sessionExpired}
+            />
+          </div>
+        )}
+
+        {/* POLISH_APPLYING 状态 — 正在应用润色修改 */}
+        {appState === "POLISH_APPLYING" && (
+          <FullscreenLoading
+            color="violet"
+            icon="sparkles"
+            title="正在应用修改..."
+            subtitle="即将完成，润色后的文档马上就好"
+          />
+        )}
+
+        {/* POLISH_DONE 状态 — 润色完成 */}
+        {appState === "POLISH_DONE" && (
+          <FullscreenDone
+            title="润色完成！"
+            subtitle="润色后的文档已下载到本地"
+            buttonText="润色新文档"
+            onReset={handleReset}
+          >
+            <PolishHistoryList
+              onViewResult={polish.handleViewHistory}
+              refreshKey={polish.historyRefreshKey}
+            />
+          </FullscreenDone>
         )}
       </main>
 

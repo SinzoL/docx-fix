@@ -155,16 +155,21 @@ export interface ErrorResponse {
 // ========================================
 export type AppState =
   | "IDLE"
+  // 检查流程
   | "UPLOADING"
   | "CHECKING"
   | "REPORT_READY"
   | "FIXING"
   | "FIX_PREVIEW"
   | "DOWNLOADED"
-  // 润色状态
+  // 提取流程
+  | "EXTRACTING"
+  | "EXTRACT_RESULT"
+  // 润色流程
   | "POLISHING"
   | "POLISH_PREVIEW"
-  | "POLISH_APPLYING";
+  | "POLISH_APPLYING"
+  | "POLISH_DONE";
 
 // ========================================
 // IndexedDB 缓存
@@ -365,4 +370,24 @@ export interface PolishHistoryRecord {
   expires_at: number;
   /** 是否已应用（下载过） */
   applied: boolean;
+}
+
+// ========================================
+// 提取历史缓存（IndexedDB）
+// ========================================
+
+/** 提取结果缓存记录 */
+export interface ExtractHistoryRecord {
+  /** 唯一 ID（crypto.randomUUID()） */
+  id: string;
+  /** 源文件名 或 "文字描述" */
+  filename: string;
+  /** 提取模式 */
+  mode: "upload" | "text";
+  /** 提取结果快照 */
+  result: ExtractResult;
+  /** 提取完成时间 */
+  created_at: number;
+  /** 缓存过期时间 */
+  expires_at: number;
 }

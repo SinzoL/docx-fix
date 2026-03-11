@@ -20,9 +20,6 @@ interface PolishPreviewProps {
   suggestions: PolishSuggestion[];
   summary: PolishSummary | null;
   onApply: (acceptedIndices: number[]) => void;
-  onBack: () => void;
-  /** 重新润色（回到上传页面并保留文件） */
-  onRePolish?: () => void;
   applying?: boolean;
   /** 从缓存恢复的 session_id，用于持久化决策 */
   sessionId?: string;
@@ -50,8 +47,6 @@ export default function PolishPreview({
   suggestions,
   summary,
   onApply,
-  onBack,
-  onRePolish,
   applying = false,
   sessionId,
   initialDecisions,
@@ -170,12 +165,7 @@ export default function PolishPreview({
                 </p>
               </div>
             </div>
-            <button
-              onClick={onBack}
-              className="text-sm text-slate-500 hover:text-slate-700 font-medium cursor-pointer"
-            >
-              ← 返回
-            </button>
+            {/* 返回由 Header 统一处理 */}
           </div>
 
           {/* session 过期警告横幅 */}
@@ -383,22 +373,9 @@ export default function PolishPreview({
             )}
           </span>
           {readOnly ? (
-            <div className="flex gap-2">
-              <button
-                onClick={onBack}
-                className="px-8 py-2.5 rounded-xl font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-sm transition-all cursor-pointer"
-              >
-                返回列表
-              </button>
-              {sessionExpired && (
-                <button
-                  onClick={onRePolish ?? onBack}
-                  className="px-8 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-lg hover:shadow-violet-500/30 hover:-translate-y-0.5 transition-all cursor-pointer"
-                >
-                  重新润色
-                </button>
-              )}
-            </div>
+            <span className="text-sm text-slate-400">
+              只读模式 · 返回请点击顶部"返回主页"
+            </span>
           ) : (
             <button
               onClick={handleApply}

@@ -32,7 +32,6 @@ interface ExtractResultViewProps {
   result: ExtractResult;
   ruleName: string;
   onRuleNameChange: (name: string) => void;
-  onReset: () => void;
   onDownload: () => void;
   onSave: () => void;
   saveDialogVisible: boolean;
@@ -44,7 +43,6 @@ export default function ExtractResultView({
   result,
   ruleName,
   onRuleNameChange,
-  onReset,
   onDownload,
   onSave,
   saveDialogVisible,
@@ -56,7 +54,7 @@ export default function ExtractResultView({
       {/* 注入 YAML 高亮样式 */}
       <style>{YAML_HIGHLIGHT_STYLES}</style>
 
-      {/* 操作栏 */}
+      {/* 操作栏（返回由 Header 统一处理，此处仅保留下载和保存按钮） */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h3 className="text-2xl font-bold text-slate-800 font-display">
@@ -71,12 +69,6 @@ export default function ExtractResultView({
           </p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={onReset}
-            className="px-4 py-2 text-sm font-medium text-slate-600 bg-white/80 border border-slate-200 rounded-xl hover:bg-white hover:text-slate-800 transition-all cursor-pointer"
-          >
-            ← 重新提取
-          </button>
           <button
             onClick={onDownload}
             className="px-4 py-2 text-sm font-medium text-slate-600 bg-white/80 border border-slate-200 rounded-xl hover:bg-white hover:text-slate-800 transition-all cursor-pointer"

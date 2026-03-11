@@ -6,15 +6,18 @@
  */
 
 import { openDB, type IDBPDatabase } from "idb";
-import type { HistoryRecord, CheckReport, FixReport, PolishHistoryRecord, PolishSuggestion, PolishSummary } from "../types";
+import type { HistoryRecord, CheckReport, FixReport, PolishHistoryRecord, PolishSuggestion, PolishSummary, ExtractHistoryRecord } from "../types";
 
 const DB_NAME = "docx-fix-cache";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = "history";
 const POLISH_STORE_NAME = "polish-history";
+const EXTRACT_STORE_NAME = "extract-history";
 const EXPIRY_DAYS = 30;
 /** 润色缓存有效期（7天，比历史记录更短以节省空间） */
 const POLISH_EXPIRY_DAYS = 7;
+/** 提取缓存有效期（30天，与检查历史一致），供外部调用方使用 */
+export const EXTRACT_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 
 type DocxFixDB = IDBPDatabase;
 
@@ -44,6 +47,14 @@ async function getDB(): Promise<DocxFixDB> {
             const polishStore = db.createObjectStore(POLISH_STORE_NAME, { keyPath: "id" });
             polishStore.createIndex("created_at", "created_at", { unique: false });
             polishStore.createIndex("expires_at", "expires_at", { unique: false });
+          }
+        }
+        // v3: 提取历史缓存
+        if (oldVersion < 3) {
+          if (!db.objectStoreNames.contains(EXTRACT_STORE_NAME)) {
+            const extractStore = db.createObjectStore(EXTRACT_STORE_NAME, { keyPath: "id" });
+            extractStore.createIndex("created_at", "created_at", { unique: false });
+            extractStore.createIndex("expires_at", "expires_at", { unique: false });
           }
         }
       },
@@ -218,6 +229,7 @@ export async function clearAll(): Promise<void> {
     const db = await getDB();
     await db.clear(STORE_NAME);
     await db.clear(POLISH_STORE_NAME);
+    await db.clear(EXTRACT_STORE_NAME);
   } catch (error) {
     console.warn("清除缓存失败:", error);
   }
@@ -373,6 +385,104 @@ export async function cleanExpiredPolish(): Promise<number> {
     const now = Date.now();
     const tx = db.transaction(POLISH_STORE_NAME, "readwrite");
     const store = tx.objectStore(POLISH_STORE_NAME);
+    const index = store.index("expires_at");
+
+    let deletedCount = 0;
+    let cursor = await index.openCursor();
+    while (cursor) {
+      if (cursor.value.expires_at < now) {
+        await cursor.delete();
+        deletedCount++;
+      } else {
+        break;
+      }
+      cursor = await cursor.continue();
+    }
+
+    await tx.done;
+    return deletedCount;
+  } catch {
+    return 0;
+  }
+}
+
+// ========================================
+// 提取历史缓存
+// ========================================
+
+/**
+ * 保存提取历史记录到 IndexedDB
+ */
+export async function saveExtractHistory(
+  record: ExtractHistoryRecord,
+): Promise<void> {
+  try {
+    const db = await getDB();
+    await db.put(EXTRACT_STORE_NAME, record);
+  } catch (error) {
+    console.warn("保存提取历史失败:", error);
+  }
+}
+
+/**
+ * 获取所有提取历史记录（按创建时间降序，过滤已过期）
+ */
+export async function getExtractHistoryList(): Promise<ExtractHistoryRecord[]> {
+  try {
+    const db = await getDB();
+    const all = await db.getAll(EXTRACT_STORE_NAME);
+    const now = Date.now();
+    return all
+      .filter((r: ExtractHistoryRecord) => r.expires_at > now)
+      .sort((a: ExtractHistoryRecord, b: ExtractHistoryRecord) => b.created_at - a.created_at);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 根据 ID 获取单条提取历史记录
+ */
+export async function getExtractHistory(
+  id: string,
+): Promise<ExtractHistoryRecord | undefined> {
+  try {
+    const db = await getDB();
+    const record = await db.get(EXTRACT_STORE_NAME, id);
+    if (!record) return undefined;
+
+    // 检查过期
+    if (record.expires_at < Date.now()) {
+      await db.delete(EXTRACT_STORE_NAME, id);
+      return undefined;
+    }
+    return record;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 删除单条提取历史记录
+ */
+export async function deleteExtractHistory(id: string): Promise<void> {
+  try {
+    const db = await getDB();
+    await db.delete(EXTRACT_STORE_NAME, id);
+  } catch (error) {
+    console.warn("删除提取历史失败:", error);
+  }
+}
+
+/**
+ * 清理过期的提取历史缓存
+ */
+export async function cleanExpiredExtract(): Promise<number> {
+  try {
+    const db = await getDB();
+    const now = Date.now();
+    const tx = db.transaction(EXTRACT_STORE_NAME, "readwrite");
+    const store = tx.objectStore(EXTRACT_STORE_NAME);
     const index = store.index("expires_at");
 
     let deletedCount = 0;
