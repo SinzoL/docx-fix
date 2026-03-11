@@ -7,7 +7,7 @@
  * - 触发上传检查
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Select, MessagePlugin, Upload } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
@@ -42,31 +42,56 @@ export default function UploadPanel({
   const [customRules, setCustomRules] = useState<CustomRule[]>([]);
   const [loading, setLoading] = useState(false);
   const [rulesLoading, setRulesLoading] = useState(true);
+  const [rulesError, setRulesError] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // 加载规则列表（服务端 + 本地）— 仅在组件挂载时执行一次
+  // 规则加载逻辑（可重试，卸载时取消飞行中的请求）
+  const mountedRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
   useEffect(() => {
-    setRulesLoading(true);
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
 
-    // 加载自定义规则（initRuleStorage 已在 App.tsx 全局执行，此处仅读取）
+  const loadRules = useCallback(() => {
+    // 取消上一次未完成的请求
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setRulesLoading(true);
+    setRulesError(false);
+
     setCustomRules(getAllCustomRules());
 
-    fetchRules()
+    fetchRules(controller.signal)
       .then((res) => {
+        if (!mountedRef.current) return;
         setRules(res.rules);
-        // 默认选中第一个（应该是 default）
         if (res.rules.length > 0 && !selectedRuleId) {
           const defaultRule = res.rules.find((r) => r.is_default);
           onRuleChange(defaultRule?.id || res.rules[0].id);
         }
       })
       .catch((err) => {
+        // 被取消的请求不处理
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!mountedRef.current) return;
         console.error("加载规则列表失败:", err);
-        MessagePlugin.error("加载规则列表失败");
+        setRulesError(true);
       })
-      .finally(() => setRulesLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在挂载时执行，selectedRuleId 变化不应重新请求规则列表
+      .finally(() => {
+        if (mountedRef.current) setRulesLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedRuleId/onRuleChange 不应触发重新请求
   }, []);
+
+  // 挂载时加载
+  useEffect(() => {
+    loadRules();
+  }, [loadRules]);
 
   // 监听 storage 事件同步自定义规则
   useEffect(() => {
@@ -263,8 +288,24 @@ export default function UploadPanel({
                   )}
                 </Select>
               </div>
+              {/* 规则加载失败提示 + 重试 */}
+              {rulesError && (
+                <div className="mt-2.5 flex items-center gap-2 text-xs">
+                  <span className="text-rose-500 flex items-center gap-1">
+                    <SvgIcon name="x-circle" size={14} />
+                    规则加载失败，请检查网络后
+                  </span>
+                  <button
+                    onClick={loadRules}
+                    disabled={rulesLoading}
+                    className="text-blue-500 hover:text-blue-600 hover:underline font-semibold cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    {rulesLoading ? "加载中..." : "点击重试"}
+                  </button>
+                </div>
+              )}
               {/* #12: 引导用户去提取/创建自定义规则 */}
-              {customRules.length === 0 && onGoToExtract && (
+              {!rulesError && customRules.length === 0 && onGoToExtract && (
                 <p className="text-xs text-slate-400 mt-2.5 flex items-center gap-1">
                   <svg className="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
                   没有找到合适的规则？

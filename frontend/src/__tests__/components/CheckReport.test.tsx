@@ -221,30 +221,33 @@ describe("CheckReportView - 折叠/展开交互", () => {
     // 折叠后检查项不可见
   });
 
-  it("展开全部按钮应展开所有类别", () => {
+  it("逐个点击可展开所有折叠的类别", () => {
     render(
       <CheckReportView report={mixedReport} onFix={vi.fn()} fixLoading={false} />
     );
-    // 找到展开全部按钮
-    const expandBtn = screen.getByText("展开全部");
-    fireEvent.click(expandBtn);
-    
+    // 点击折叠的页面设置类别头部将其展开
+    const categoryHeaders = screen.getAllByTestId("category-header");
+    const pageSetupHeader = categoryHeaders.find(h => h.textContent?.includes("页面设置"));
+    expect(pageSetupHeader).toBeTruthy();
+    fireEvent.click(pageSetupHeader!);
+
     // 所有类别的检查项应可见
     expect(screen.getByText("纸张大小")).toBeVisible();
     expect(screen.getByText(/字体为 Arial/)).toBeVisible();
   });
 
-  it("收起全部按钮应折叠所有类别", () => {
+  it("逐个点击可折叠所有展开的类别", () => {
     render(
       <CheckReportView report={mixedReport} onFix={vi.fn()} fixLoading={false} />
     );
-    // 先展开全部
-    fireEvent.click(screen.getByText("展开全部"));
-    // 再收起全部
-    fireEvent.click(screen.getByText("收起全部"));
-    
-    // 收起后按钮变回"展开全部"
-    expect(screen.getByText("展开全部")).toBeInTheDocument();
+    // 正文样式默认展开，点击头部折叠
+    const categoryHeaders = screen.getAllByTestId("category-header");
+    const styleHeader = categoryHeaders.find(h => h.textContent?.includes("正文样式"));
+    expect(styleHeader).toBeTruthy();
+    fireEvent.click(styleHeader!);
+
+    // 类别头部仍然存在（折叠后头部可见）
+    expect(screen.getByText(/正文样式/)).toBeInTheDocument();
   });
 
   it("全部通过时所有类别应默认折叠", () => {

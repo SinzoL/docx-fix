@@ -13,7 +13,7 @@
  * - #13: 历史报告只读模式
  */
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Select, Drawer, MessagePlugin } from "tdesign-react";
 import type {
   CheckReport as CheckReportType,
@@ -79,37 +79,67 @@ export default function CheckReportView({
   const [aiReviews, setAiReviews] = useState<Record<string, AiReviewResult>>({});
   const [expandedAiReason, setExpandedAiReason] = useState<string | null>(null);
 
-  // #2 #16: 加载规则列表（服务端 + 本地自定义）
+  // #2 #16: 加载规则列表（服务端 + 本地自定义），卸载时取消飞行中的请求
+  const mountedRef = useRef(true);
+  const rulesAbortRef = useRef<AbortController | null>(null);
+  const reviewAbortRef = useRef<AbortController | null>(null);
   useEffect(() => {
-    fetchRules()
-      .then((res) => setRules(res.rules))
-      .catch(() => {});
+    return () => {
+      mountedRef.current = false;
+      rulesAbortRef.current?.abort();
+      reviewAbortRef.current?.abort();
+    };
+  }, []);
+
+  const loadRules = useCallback(() => {
+    rulesAbortRef.current?.abort();
+    const controller = new AbortController();
+    rulesAbortRef.current = controller;
+
+    fetchRules(controller.signal)
+      .then((res) => { if (mountedRef.current) setRules(res.rules); })
+      .catch((err) => {
+        // 被取消的请求或卸载后不处理
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // 规则列表加载失败不阻塞报告展示，切换标准下拉框将为空
+      });
     setCustomRules(getAllCustomRules());
   }, []);
 
-  // 自动发起 AI 审查
+  useEffect(() => {
+    loadRules();
+  }, [loadRules]);
+
+  // 自动发起 AI 审查（卸载时取消）
   useEffect(() => {
     const meta = report.text_convention_meta;
     if (!meta || meta.disputed_items.length === 0 || !sessionId) return;
+
+    reviewAbortRef.current?.abort();
+    const controller = new AbortController();
+    reviewAbortRef.current = controller;
 
     setAiReviewLoading(true);
     reviewConventions(
       sessionId,
       meta.disputed_items,
       meta.document_stats,
+      controller.signal,
     )
       .then((res) => {
+        if (!mountedRef.current) return;
         const reviewMap: Record<string, AiReviewResult> = {};
         for (const r of res.reviews) {
           reviewMap[r.id] = { verdict: r.verdict, reason: r.reason };
         }
         setAiReviews(reviewMap);
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         // AI 审查失败，不影响其他功能
       })
       .finally(() => {
-        setAiReviewLoading(false);
+        if (mountedRef.current) setAiReviewLoading(false);
       });
   }, [report.text_convention_meta, sessionId]);
 

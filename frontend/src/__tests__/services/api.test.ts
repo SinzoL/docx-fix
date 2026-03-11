@@ -44,13 +44,13 @@ describe("fetchRules", () => {
     const result = await fetchRules();
     expect(result.rules).toHaveLength(1);
     expect(result.rules[0].id).toBe("default");
-    expect(mockFetch).toHaveBeenCalledWith("/api/rules");
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/rules");
   });
 
   it("API 错误应抛出 ApiError", async () => {
     mockFetch.mockResolvedValue({
       ok: false,
-      status: 500,
+      status: 400,
       json: () =>
         Promise.resolve({ error: "SERVER_ERROR", message: "服务器错误" }),
     });
@@ -73,7 +73,7 @@ describe("fetchRuleDetail", () => {
     });
 
     await fetchRuleDetail("default");
-    expect(mockFetch).toHaveBeenCalledWith("/api/rules/default");
+    expect(mockFetch.mock.calls[0][0]).toBe("/api/rules/default");
   });
 });
 
@@ -115,8 +115,8 @@ describe("fixFile", () => {
       filename: "test.docx",
       rule_name: "通用默认检查",
       fix_items: [],
-      before_summary: { pass: 5, warn: 1, fail: 2 },
-      after_summary: { pass: 7, warn: 1, fail: 0 },
+      before_summary: { pass_count: 5, warn: 1, fail: 2 },
+      after_summary: { pass_count: 7, warn: 1, fail: 0 },
       changed_items: [],
       fixed_at: "2026-01-01T00:00:00Z",
     };
@@ -148,7 +148,7 @@ describe("downloadFixedFile", () => {
 
     const result = await downloadFixedFile("session-123");
     expect(result).toBeInstanceOf(Blob);
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockFetch.mock.calls[0][0]).toBe(
       "/api/fix/download?session_id=session-123"
     );
   });

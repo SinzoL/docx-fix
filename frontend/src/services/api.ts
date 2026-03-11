@@ -34,6 +34,57 @@ export class ApiError extends Error {
 }
 
 /**
+ * 带重试的 fetch 封装
+ *
+ * 仅对网络层错误（TypeError: Failed to fetch）和 5xx 服务端错误进行重试，
+ * 4xx 客户端错误不会重试。采用指数退避策略。
+ * 支持通过 init.signal（AbortSignal）取消请求，取消后不再重试。
+ */
+async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  maxRetries = 2,
+  baseDelay = 800
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(input, init);
+
+      // 5xx 服务端错误才重试，4xx 不重试
+      if (response.status >= 500 && attempt < maxRetries) {
+        lastError = new Error(`Server error ${response.status}`);
+        // 如果已被取消，不再重试
+        if (init?.signal?.aborted) throw init.signal.reason ?? new DOMException("Aborted", "AbortError");
+        await delay(baseDelay * Math.pow(2, attempt));
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      // 被取消的请求直接抛出，不重试
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw err;
+      }
+      // 网络层错误（连接断开、DNS 失败等）
+      lastError = err;
+      if (attempt < maxRetries) {
+        if (init?.signal?.aborted) throw init.signal.reason ?? new DOMException("Aborted", "AbortError");
+        await delay(baseDelay * Math.pow(2, attempt));
+        continue;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * 统一处理 API 响应
  */
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -60,8 +111,8 @@ async function handleResponse<T>(response: Response): Promise<T> {
 /**
  * GET /api/rules — 获取可用规则列表
  */
-export async function fetchRules(): Promise<RulesListResponse> {
-  const response = await fetch(`${API_BASE}/rules`);
+export async function fetchRules(signal?: AbortSignal): Promise<RulesListResponse> {
+  const response = await fetchWithRetry(`${API_BASE}/rules`, { signal });
   return handleResponse<RulesListResponse>(response);
 }
 
@@ -71,7 +122,7 @@ export async function fetchRules(): Promise<RulesListResponse> {
 export async function fetchRuleDetail(
   ruleId: string
 ): Promise<RuleDetailResponse> {
-  const response = await fetch(`${API_BASE}/rules/${ruleId}`);
+  const response = await fetchWithRetry(`${API_BASE}/rules/${ruleId}`);
   return handleResponse<RuleDetailResponse>(response);
 }
 
@@ -94,10 +145,10 @@ export async function checkFile(
     formData.append("custom_rules_yaml", customRulesYaml);
   }
 
-  const response = await fetch(`${API_BASE}/check`, {
+  const response = await fetchWithRetry(`${API_BASE}/check`, {
     method: "POST",
     body: formData,
-  });
+  }, 1); // 上传类请求只重试 1 次
 
   return handleResponse<CheckReport>(response);
 }
@@ -120,7 +171,7 @@ export async function recheckFile(
     body.custom_rules_yaml = customRulesYaml;
   }
 
-  const response = await fetch(`${API_BASE}/recheck`, {
+  const response = await fetchWithRetry(`${API_BASE}/recheck`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -154,7 +205,7 @@ export async function fixFile(
     body.include_text_fix = true;
   }
 
-  const response = await fetch(`${API_BASE}/fix`, {
+  const response = await fetchWithRetry(`${API_BASE}/fix`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -169,7 +220,7 @@ export async function fixFile(
  * GET /api/fix/download — 下载修复后文件
  */
 export async function downloadFixedFile(sessionId: string): Promise<Blob> {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${API_BASE}/fix/download?session_id=${sessionId}`
   );
 
@@ -219,10 +270,10 @@ export async function extractRules(
     formData.append("name", name);
   }
 
-  const response = await fetch(`${API_BASE}/extract-rules`, {
+  const response = await fetchWithRetry(`${API_BASE}/extract-rules`, {
     method: "POST",
     body: formData,
-  });
+  }, 1);
 
   return handleResponse<ExtractResult>(response);
 }
@@ -234,7 +285,7 @@ export async function generateRules(
   text: string,
   name?: string
 ): Promise<AiGenerateRulesResponse> {
-  const response = await fetch(`${API_BASE}/ai/generate-rules`, {
+  const response = await fetchWithRetry(`${API_BASE}/ai/generate-rules`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -259,9 +310,10 @@ export interface AiReviewConventionsResponse {
 export async function reviewConventions(
   sessionId: string,
   disputedItems: DisputedItem[],
-  documentStats: Record<string, number>
+  documentStats: Record<string, number>,
+  signal?: AbortSignal
 ): Promise<AiReviewConventionsResponse> {
-  const response = await fetch(`${API_BASE}/ai/review-conventions`, {
+  const response = await fetchWithRetry(`${API_BASE}/ai/review-conventions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -271,6 +323,7 @@ export async function reviewConventions(
       disputed_items: disputedItems,
       document_stats: documentStats,
     }),
+    signal,
   });
 
   return handleResponse<AiReviewConventionsResponse>(response);
@@ -287,7 +340,7 @@ export async function applyPolish(
   sessionId: string,
   acceptedIndices: number[]
 ): Promise<PolishApplyResponse> {
-  const response = await fetch(`${API_BASE}/polish/apply`, {
+  const response = await fetchWithRetry(`${API_BASE}/polish/apply`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -305,7 +358,7 @@ export async function applyPolish(
  * GET /api/polish/download/{sessionId} — 下载润色后的文档
  */
 export async function downloadPolishedFile(sessionId: string): Promise<Blob> {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${API_BASE}/polish/download/${sessionId}`
   );
 
