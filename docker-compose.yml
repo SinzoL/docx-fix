@@ -12,7 +12,8 @@ services:
       - ENV=production
     volumes:
       - ./backend/rules:/app/backend/rules:ro
-      - docxfix-tmp:/tmp/docx-fix
+    tmpfs:
+      - /tmp/docx-fix:uid=1000,gid=1000
     restart: unless-stopped
     deploy:
       resources:
@@ -89,6 +90,4 @@ networks:
   default:
     name: docxfix-network
 
-volumes:
-  docxfix-tmp:
-    driver: local
+
