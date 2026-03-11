@@ -20,8 +20,6 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from config import TEMP_DIR, SESSION_EXPIRE_SECONDS, SESSION_CLEANUP_INTERVAL, CORS_ORIGINS, ENABLE_CORS_MIDDLEWARE, setup_logging  # noqa: E402
 from api.routes import router  # noqa: E402
-from api.ai_routes import ai_router  # noqa: E402
-from api.polish_routes import polish_router  # noqa: E402
 from services.polisher_service import cleanup_expired_polish_sessions  # noqa: E402
 
 # 初始化日志
@@ -95,7 +93,5 @@ if ENABLE_CORS_MIDDLEWARE:
 else:
     logger.info("CORS 中间件已跳过（生产模式，由 Nginx 处理）")
 
-# 挂载 API 路由
+# 挂载 API 路由（所有子路由已在 routes.py 中统一注册）
 app.include_router(router, prefix="/api")
-app.include_router(ai_router, prefix="/api")
-app.include_router(polish_router, prefix="/api")

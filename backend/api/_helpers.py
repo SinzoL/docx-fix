@@ -11,14 +11,16 @@ import json
 import os
 import re
 import logging
+import asyncio
 from pathlib import Path
 from typing import Optional
 
 from fastapi import UploadFile, HTTPException
 
 from api.schemas import ErrorResponse
-from config import TEMP_DIR, MAX_FILE_SIZE
+from config import TEMP_DIR, MAX_FILE_SIZE, MAX_CONCURRENT_UPLOADS
 from services.rules_service import get_rules_list, get_rule_path
+from services import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -239,3 +241,23 @@ async def validate_and_read_upload(file: UploadFile) -> bytes:
         )
 
     return content
+
+
+# ========================================
+# LLM 服务共享基础设施
+# ========================================
+
+# AI / 润色接口共享的 LLM 并发限制信号量
+llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
+
+
+def check_llm_available():
+    """检查 LLM 服务是否可用，不可用时抛出 503 异常。"""
+    if not llm_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail=ErrorResponse(
+                error="LLM_UNAVAILABLE",
+                message="AI 服务未配置，请检查 DEEPSEEK_API_KEY 环境变量"
+            ).model_dump(),
+        )

@@ -15,8 +15,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from config import MAX_CONCURRENT_UPLOADS
-
+from api._helpers import check_llm_available, llm_semaphore
 from api.schemas import (
     AiSummarizeRequest,
     AiChatRequest,
@@ -39,21 +38,6 @@ logger = logging.getLogger(__name__)
 
 ai_router = APIRouter(prefix="/ai", tags=["AI"])
 
-# AI 接口并发限制信号量：保护 LLM API 调用额度
-_ai_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
-
-
-def _check_llm_available():
-    """检查 LLM 服务是否可用"""
-    if not llm_service.is_available():
-        raise HTTPException(
-            status_code=503,
-            detail=ErrorResponse(
-                error="LLM_UNAVAILABLE",
-                message="AI 服务未配置，请检查 DEEPSEEK_API_KEY 环境变量"
-            ).model_dump(),
-        )
-
 
 async def _sse_generator(messages: list[dict]):
     """通用的 SSE 流式生成器（带并发限制）。
@@ -63,7 +47,7 @@ async def _sse_generator(messages: list[dict]):
     ...
     data: {"token": "", "done": true}
     """
-    async with _ai_semaphore:
+    async with llm_semaphore:
         try:
             async for token in llm_service.chat_completion_stream(messages):
                 payload = json.dumps({"token": token}, ensure_ascii=False)
@@ -91,7 +75,7 @@ async def summarize_report(request: AiSummarizeRequest):
 
     返回 SSE 流式响应，前端逐字渲染。
     """
-    _check_llm_available()
+    check_llm_available()
 
     messages = build_summarize_messages(request.check_report)
 
@@ -115,7 +99,7 @@ async def chat(request: AiChatRequest):
 
     支持多轮对话，返回 SSE 流式响应。
     """
-    _check_llm_available()
+    check_llm_available()
 
     if not request.messages:
         raise HTTPException(
@@ -151,7 +135,7 @@ async def generate_rules(request: AiGenerateRulesRequest):
 
     非流式调用，返回完整 YAML 和提醒信息。
     """
-    _check_llm_available()
+    check_llm_available()
 
     if not request.text or not request.text.strip():
         raise HTTPException(
@@ -168,7 +152,7 @@ async def generate_rules(request: AiGenerateRulesRequest):
     )
 
     try:
-        async with _ai_semaphore:
+        async with llm_semaphore:
             yaml_content = await llm_service.chat_completion(
                 messages=messages,
                 max_tokens=4096,  # 规则文件可能较长
@@ -242,7 +226,7 @@ async def review_conventions(request: AiReviewConventionsRequest):
 
     try:
         # 15 秒超时保护 + 并发限制
-        async with _ai_semaphore:
+        async with llm_semaphore:
             raw_response = await asyncio.wait_for(
                 llm_service.chat_completion(
                     messages=messages,

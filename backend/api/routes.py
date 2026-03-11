@@ -11,6 +11,8 @@ from api.rule_routes import rule_router
 from api.check_routes import check_router
 from api.fix_routes import fix_router
 from api.extract_routes import extract_router
+from api.ai_routes import ai_router
+from api.polish_routes import polish_router
 
 router = APIRouter()
 
@@ -19,3 +21,5 @@ router.include_router(rule_router)
 router.include_router(check_router)
 router.include_router(fix_router)
 router.include_router(extract_router)
+router.include_router(ai_router)
+router.include_router(polish_router)

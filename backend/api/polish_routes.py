@@ -26,29 +26,15 @@ from api._helpers import (
     safe_session_dir,
     safe_filename,
     validate_and_read_upload,
+    check_llm_available,
+    llm_semaphore,
 )
 from services import llm_service
 from services import polisher_service
-from config import MAX_CONCURRENT_UPLOADS
 
 logger = logging.getLogger(__name__)
 
 polish_router = APIRouter(prefix="/polish", tags=["Polish"])
-
-# 并发限制信号量：润色涉及 LLM 调用，限制并发保护资源
-_polish_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
-
-
-def _check_llm_available():
-    """检查 LLM 服务是否可用"""
-    if not llm_service.is_available():
-        raise HTTPException(
-            status_code=503,
-            detail=ErrorResponse(
-                error="LLM_UNAVAILABLE",
-                message="AI 服务未配置，请检查 DEEPSEEK_API_KEY 环境变量"
-            ).model_dump(),
-        )
 
 
 # ========================================
@@ -63,7 +49,7 @@ async def polish_file(
 
     返回 SSE 流式响应，每完成一批段落推送一个事件。
     """
-    _check_llm_available()
+    check_llm_available()
 
     # 验证文件（扩展名、大小、魔数）
     content = await validate_and_read_upload(file)
@@ -83,7 +69,7 @@ async def polish_file(
 
     # 限制并发：SSE generator 包裹在信号量内
     async def _rate_limited_generator():
-        async with _polish_semaphore:
+        async with llm_semaphore:
             async for chunk in polisher_service.polish_file(
                 file_path=filepath,
                 filename=file.filename,

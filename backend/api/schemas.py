@@ -99,7 +99,7 @@ class DisputedItem(BaseModel):
     id: str
     rule: str
     paragraph_index: int
-    paragraph_source: str
+    paragraph_source: str = "body"
     text_context: str
     issue_description: str
 
@@ -227,20 +227,10 @@ class AiGenerateRulesResponse(BaseModel):
 # AI 文本排版争议审查
 # ========================================
 
-class AiReviewDisputedItem(BaseModel):
-    """争议审查请求中的单个争议项"""
-    id: str
-    rule: str
-    paragraph_index: int
-    paragraph_source: str = "body"
-    text_context: str
-    issue_description: str
-
-
 class AiReviewConventionsRequest(BaseModel):
     """POST /api/ai/review-conventions 请求体"""
     session_id: str = ""
-    disputed_items: list[AiReviewDisputedItem]
+    disputed_items: list[DisputedItem]
     document_stats: dict = {}  # {total_paragraphs, cjk_spaced_count, cjk_unspaced_count}
 
 
