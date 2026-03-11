@@ -33,6 +33,8 @@ from scripts.checker.text_convention_checker import (
     _check_fullwidth_space,
     _check_halfwidth_punctuation_in_chinese,
     _check_sentence_ending,
+    _is_dot_in_special_context,
+    _is_punct_in_special_context,
     _DUPLICATE_PUNCT_RE,
     _CJK_SPACE_CJK_RE,
     _MULTI_SPACE_RE,
@@ -102,6 +104,15 @@ def _apply_fix_to_text(rule: str, text: str, issue: TextIssue) -> Optional[str]:
         pos = issue.char_offset
         if 0 <= pos < len(text):
             ch = text[pos]
+
+            # 安全保护：'.' 在特殊语境中不替换（文件扩展名/小数/版本号/缩写等）
+            if ch == '.' and _is_dot_in_special_context(text, pos):
+                return None
+
+            # 安全保护：其他标点在特殊语境中不替换（英文短语中的逗号等）
+            if ch != '.' and _is_punct_in_special_context(text, pos, ch):
+                return None
+
             # 半角→全角映射
             hw_map = {
                 ',': '，', '.': '。', ';': '；', ':': '：',

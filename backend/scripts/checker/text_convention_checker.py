@@ -700,16 +700,85 @@ def _check_fullwidth_space(
     return issues
 
 
+def _is_dot_in_special_context(text: str, pos: int) -> bool:
+    """判断 pos 位置的 '.' 是否处于特殊语境（不应被替换为中文句号）。
+
+    以下情况返回 True（不报告/不修复）：
+    - 文件扩展名：xxx.pth / xxx.docx / xxx.py（'.' 后跟英文字母）
+    - 小数/版本号：3.14 / v2.0（'.' 前后都是数字）
+    - 缩写/域名：e.g. / Dr. / www.example.com
+    - 英文短语中的句号：'.' 前后都是英文字母/数字
+    - 列表序号：1. 2.（'.' 前是数字，后是空格或行尾）
+    """
+    prev_ch = text[pos - 1] if pos > 0 else ''
+    next_ch = text[pos + 1] if pos + 1 < len(text) else ''
+
+    # '.' 后面紧跟英文字母 → 文件扩展名/域名（如 .pth .com）
+    if next_ch.isascii() and next_ch.isalpha():
+        return True
+
+    # '.' 前面是英文字母/数字 → 英文缩写/版本号/文件名（如 e.g. v2.0 test.py）
+    if prev_ch.isascii() and (prev_ch.isalpha() or prev_ch.isdigit()):
+        return True
+
+    # '.' 前面是数字，后面是数字 → 小数（如 3.14）
+    if prev_ch.isdigit() and next_ch.isdigit():
+        return True
+
+    # '.' 前面是数字，后面是空格或行尾 → 列表序号（如 "1. "）
+    if prev_ch.isdigit() and (next_ch == ' ' or next_ch == ''):
+        return True
+
+    return False
+
+
+def _is_punct_in_special_context(text: str, pos: int, ch: str) -> bool:
+    """判断 pos 位置的半角标点是否处于特殊语境（不应被替换为全角）。
+
+    检测以下通用场景：
+    - 括号内是纯英文/数字/标点（如技术术语括注）
+    - 英文句子中夹杂的标点
+    """
+    prev_ch = text[pos - 1] if pos > 0 else ''
+    next_ch = text[pos + 1] if pos + 1 < len(text) else ''
+
+    # 逗号/分号/冒号：前后都是英文字母或数字 → 英文语境，不替换
+    if ch in ',;:':
+        prev_is_ascii = prev_ch.isascii() and (prev_ch.isalpha() or prev_ch.isdigit())
+        next_is_ascii = next_ch.isascii() and (next_ch.isalpha() or next_ch == ' ')
+        if prev_is_ascii and next_is_ascii:
+            return True
+
+    return False
+
+
 def _check_halfwidth_punctuation_in_chinese(
     para_info: ParagraphInfo,
     text: str,
 ) -> list[TextIssue]:
-    """检查中文段落中的半角标点（争议项，需 LLM 审查）"""
+    """检查中文段落中的半角标点（争议项，需 LLM 审查）
+
+    排除以下特殊语境：
+    - 文件扩展名（.pth .docx .py 等）
+    - 小数/版本号（3.14  v2.0）
+    - 英文缩写（e.g.  Dr.  etc.）
+    - 列表序号（1. 2.）
+    - 英文短语中的标点
+    """
     issues = []
 
     for i, ch in enumerate(text):
         if ch not in _EN_PUNCT_IN_CN:
             continue
+
+        # '.' 有大量特殊用途，单独判断
+        if ch == '.' and _is_dot_in_special_context(text, i):
+            continue
+
+        # 其他标点的特殊语境检查
+        if ch != '.' and _is_punct_in_special_context(text, i, ch):
+            continue
+
         # 检查前后字符是否为 CJK
         prev_ch = text[i - 1] if i > 0 else ''
         next_ch = text[i + 1] if i + 1 < len(text) else ''
