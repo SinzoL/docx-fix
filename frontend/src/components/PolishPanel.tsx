@@ -1,14 +1,16 @@
 /**
- * PolishPanel — 内容润色主面板
+ * PolishPanel — 内容润色主面板（状态编排器）
  *
  * 功能：
  * - 拖拽/点击上传 .docx 文件
- * - SSE 接收润色进度和建议
+ * - 委托 usePolishSSE 处理 SSE 润色流
  * - 渐进式渲染已完成的建议
  * - 润色完成后进入预览模式
+ *
+ * 子组件：PolishProgress（进度）、PolishDone（完成页）、PolishPreview（预览）
  */
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Upload, MessagePlugin } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
@@ -16,8 +18,11 @@ import { SvgIcon } from "./icons/SvgIcon";
 import type { PolishSuggestion, PolishSummary, PolishHistoryRecord } from "../types";
 import PolishPreview from "./PolishPreview";
 import PolishHistoryList from "./PolishHistoryList";
+import PolishProgress from "./PolishProgress";
+import PolishDone from "./PolishDone";
 import { applyPolish, downloadPolishedFile, triggerDownload } from "../services/api";
-import { savePolishResult, getLatestPolishResult, markPolishApplied } from "../services/cache";
+import { getLatestPolishResult, markPolishApplied } from "../services/cache";
+import { usePolishSSE } from "../hooks/usePolishSSE";
 
 interface PolishPanelProps {
   onError?: (message: string) => void;
@@ -34,18 +39,14 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [totalParagraphs, setTotalParagraphs] = useState(0);
   const [polishableParagraphs, setPolishableParagraphs] = useState(0);
-  /** 历史列表刷新触发器 */
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
-  /** 是否为只读模式（查看历史润色记录时） */
   const [isReadOnly, setIsReadOnly] = useState(false);
-  /** 从历史记录恢复的决策 */
   const [initialDecisions, setInitialDecisions] = useState<Record<number, boolean> | undefined>(undefined);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { startPolish, abort } = usePolishSSE();
 
   // 组件挂载时尝试恢复 IndexedDB 中的润色缓存
   useEffect(() => {
-    // 只在 IDLE 状态且没有建议时尝试恢复
     if (state !== "IDLE" || suggestions.length > 0) return;
 
     getLatestPolishResult().then((cached) => {
@@ -58,25 +59,20 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         setState("POLISH_PREVIEW");
         MessagePlugin.info("已恢复上次的润色结果");
       }
-    }).catch(() => {
-      // IndexedDB 不可用，忽略
-    });
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 润色进行中，禁止用户意外关闭/刷新页面
   useEffect(() => {
     if (state !== "POLISHING") return;
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
+    return () => { window.removeEventListener("beforeunload", handleBeforeUnload); };
   }, [state]);
+
+  // 组件卸载时取消 SSE 请求
+  useEffect(() => () => { abort(); }, [abort]);
 
   // 文件变化处理
   const handleFileChange = useCallback((files: Array<UploadFile>) => {
@@ -96,7 +92,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     }
   }, []);
 
-  // 开始润色
+  // 开始润色（委托给 usePolishSSE）
   const handleStartPolish = useCallback(async () => {
     if (!selectedFile) {
       MessagePlugin.warning("请先选择文件");
@@ -108,156 +104,56 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     setSummary(null);
     setProgress({ current: 0, total: 0 });
 
-    // 构建 FormData
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("enable_reviewer", "true");
-
-    // 取消上一次未完成的请求
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
     try {
-      // 使用 fetch 发起 SSE 请求（带 AbortSignal）
-      const response = await fetch("/api/polish", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.detail?.message || `请求失败 (${response.status})`);
-      }
-
       setState("POLISHING");
 
-      // 读取 SSE 流
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("无法读取响应流");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // 解析 SSE 事件（以 \n\n 分隔）
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || ""; // 最后一个可能不完整
-
-        for (const eventStr of events) {
-          if (!eventStr.trim()) continue;
-
-          const lines = eventStr.split("\n");
-          let eventName = "";
-          const dataLines: string[] = [];
-
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              eventName = line.slice(7);
-            } else if (line.startsWith("data: ")) {
-              dataLines.push(line.slice(6));
-            }
+      await startPolish(selectedFile, {
+        onProgress: (total_batches, total_paragraphs, polishable_paragraphs) => {
+          setProgress({ current: 0, total: total_batches });
+          setTotalParagraphs(total_paragraphs);
+          setPolishableParagraphs(polishable_paragraphs);
+        },
+        onBatchComplete: (batch_index, batchSuggestions) => {
+          setProgress(prev => ({ ...prev, current: batch_index + 1 }));
+          if (batchSuggestions.length > 0) {
+            setSuggestions(prev => [...prev, ...batchSuggestions]);
           }
-
-          const eventData = dataLines.join("\n");
-
-          if (!eventName || !eventData) continue;
-
-          try {
-            const data = JSON.parse(eventData);
-
-            switch (eventName) {
-              case "rule_scan_complete":
-                // 规则扫描完成（毫秒级，先于 LLM 润色结果）
-                if (data.suggestions && data.suggestions.length > 0) {
-                  setSuggestions(prev => [...prev, ...data.suggestions]);
-                }
-                break;
-
-              case "progress":
-                setProgress({ current: 0, total: data.total_batches || 0 });
-                setTotalParagraphs(data.total_paragraphs || 0);
-                setPolishableParagraphs(data.polishable_paragraphs || 0);
-                break;
-
-              case "batch_complete":
-                setProgress(prev => ({ ...prev, current: (data.batch_index || 0) + 1 }));
-                if (data.suggestions && data.suggestions.length > 0) {
-                  setSuggestions(prev => [...prev, ...data.suggestions]);
-                }
-                break;
-
-              case "complete":
-                setSessionId(data.session_id || "");
-                if (data.summary) {
-                  setSummary(data.summary);
-                }
-                // 用完整报告中的 suggestions 替换（确保完整性）
-                if (data.suggestions) {
-                  setSuggestions(data.suggestions);
-                }
-                setState("POLISH_PREVIEW");
-
-                // 润色完成后缓存结果到 IndexedDB
-                if (data.session_id && data.suggestions) {
-                  savePolishResult(
-                    data.session_id,
-                    selectedFile?.name || "unknown.docx",
-                    data.suggestions,
-                    data.summary || null,
-                  ).then(() => {
-                    // 刷新历史列表
-                    setHistoryRefreshKey(k => k + 1);
-                  }).catch((err: unknown) => {
-                    console.warn("缓存润色结果失败:", err);
-                  });
-                }
-                setIsReadOnly(false);
-                setInitialDecisions(undefined);
-                break;
-
-              case "error":
-                MessagePlugin.error(data.message || "润色过程中出错");
-                break;
-            }
-          } catch {
-            // JSON 解析失败，跳过
-          }
-        }
-      }
+        },
+        onRuleScanComplete: (ruleSuggestions) => {
+          setSuggestions(prev => [...prev, ...ruleSuggestions]);
+        },
+        onComplete: (session_id, finalSuggestions, completeSummary) => {
+          setSessionId(session_id);
+          setSummary(completeSummary);
+          setSuggestions(finalSuggestions);
+          setState("POLISH_PREVIEW");
+          setIsReadOnly(false);
+          setInitialDecisions(undefined);
+          setHistoryRefreshKey(k => k + 1);
+        },
+        onError: (message) => {
+          MessagePlugin.error(message);
+        },
+      });
     } catch (err: unknown) {
-      // 请求被取消时静默处理（用户主动取消）
-      if (err instanceof DOMException && err.name === "AbortError") {
-        return;
-      }
+      if (err instanceof DOMException && err.name === "AbortError") return;
       const message = err instanceof Error ? err.message : "润色失败，请重试";
       onError?.(message);
       MessagePlugin.error(message);
       setState("IDLE");
     }
-  }, [selectedFile, onError]);
+  }, [selectedFile, onError, startPolish]);
 
   // 应用选中的修改并下载
   const handleApplyAndDownload = useCallback(async (acceptedIndices: number[]) => {
     if (!sessionId) return;
-
     setState("APPLYING");
-
     try {
       const result = await applyPolish(sessionId, acceptedIndices);
-      // 下载文件
       const blob = await downloadPolishedFile(sessionId);
       triggerDownload(blob, result.filename.replace(/\.docx$/, "_polished.docx"));
       setState("DONE");
       MessagePlugin.success(`已应用 ${result.applied_count} 条修改并下载`);
-
-      // 标记缓存为已应用并刷新历史列表
       markPolishApplied(sessionId).then(() => {
         setHistoryRefreshKey(k => k + 1);
       }).catch(() => {});
@@ -274,16 +170,13 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     setSummary(record.summary);
     setSessionId(record.id);
     setInitialDecisions(record.decisions);
-    // 已应用的记录只读查看，未应用的记录可以继续操作
     setIsReadOnly(record.applied);
     setState("POLISH_PREVIEW");
   }, []);
 
   // 重新开始
   const handleReset = useCallback(() => {
-    // 取消进行中的 SSE 请求
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
+    abort();
     setState("IDLE");
     setSelectedFile(null);
     setSuggestions([]);
@@ -292,16 +185,10 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     setProgress({ current: 0, total: 0 });
     setIsReadOnly(false);
     setInitialDecisions(undefined);
-  }, []);
+  }, [abort]);
 
-  // 组件卸载时取消 SSE 请求，避免后端继续调用 LLM
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
+  // ========== 渲染 ==========
 
-  // 渲染不同状态
   if (state === "POLISH_PREVIEW" || state === "APPLYING") {
     return (
       <PolishPreview
@@ -319,28 +206,11 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
 
   if (state === "DONE") {
     return (
-      <div className="space-y-8">
-        <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg mx-auto animate-in fade-in zoom-in-95 duration-500">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-tr from-green-400 to-emerald-500 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-6 sm:mb-8 animate-bounce">
-            <span className="text-3xl sm:text-4xl text-white">✓</span>
-          </div>
-          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2 sm:mb-3 font-display">润色完成！</h3>
-          <p className="text-base sm:text-lg text-slate-600">
-            润色后的文档已下载到本地
-          </p>
-          <button
-            onClick={handleReset}
-            className="mt-8 px-8 py-3 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
-          >
-            润色新文档
-          </button>
-        </div>
-        {/* 润色历史 */}
-        <PolishHistoryList
-          onViewResult={handleViewHistoryResult}
-          refreshKey={historyRefreshKey}
-        />
-      </div>
+      <PolishDone
+        onReset={handleReset}
+        onViewHistoryResult={handleViewHistoryResult}
+        historyRefreshKey={historyRefreshKey}
+      />
     );
   }
 
@@ -421,44 +291,12 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
 
         {/* 润色进度（polishing 状态时显示） */}
         {state === "POLISHING" && (
-          <div className="px-4 sm:px-6 pb-4">
-            <div className="bg-violet-50/60 rounded-xl p-4 border border-violet-100/60">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-violet-700">
-                  正在润色文档...
-                </span>
-                <span className="text-xs text-violet-500">
-                  {progress.current} / {progress.total} 批次
-                </span>
-              </div>
-              <div className="w-full bg-violet-200/50 rounded-full h-2">
-                <div
-                  className="bg-gradient-to-r from-violet-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : '0%' }}
-                />
-              </div>
-              <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
-                <span>共 {totalParagraphs} 段落，{polishableParagraphs} 段可润色</span>
-                <span>{suggestions.length} 条建议</span>
-              </div>
-            </div>
-
-            {/* 实时显示已完成的建议 */}
-            {suggestions.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs font-semibold text-slate-500">已发现的润色建议：</p>
-                {suggestions.slice(-3).map((s, i) => (
-                  <div key={i} className="text-xs bg-white/60 rounded-lg p-2 border border-slate-200/50">
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-600 mr-1">
-                      {s.source === 'rule' ? <SvgIcon name="wrench" size={10} className="inline-block mr-0.5" /> : <SvgIcon name="bot" size={10} className="inline-block mr-0.5" />}
-                      {s.change_type === 'grammar' ? '语病' : s.change_type === 'wording' ? '用词' : s.change_type === 'punctuation' ? '标点' : s.change_type === 'structure' ? '句式' : s.change_type === 'typo' ? '错别字' : s.change_type === 'rule_punctuation' ? '标点' : s.change_type === 'rule_space' ? '空格' : s.change_type === 'rule_fullwidth' ? '全半角' : '学术'}
-                    </span>
-                    <span className="text-slate-600 line-through">{s.original_text.slice(0, 30)}...</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <PolishProgress
+            progress={progress}
+            totalParagraphs={totalParagraphs}
+            polishableParagraphs={polishableParagraphs}
+            suggestions={suggestions}
+          />
         )}
 
         {/* 开始润色按钮 */}
@@ -480,7 +318,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
       </div>
 
       {/* 润色历史记录（IDLE 状态显示） */}
-      {(state === "IDLE") && (
+      {state === "IDLE" && (
         <div className="mt-8">
           <PolishHistoryList
             onViewResult={handleViewHistoryResult}

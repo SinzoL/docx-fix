@@ -8,11 +8,9 @@
 """
 
 import os
-import re
 import uuid
 import logging
 import asyncio
-from pathlib import Path
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -22,9 +20,15 @@ from api.schemas import (
     PolishApplyResponseSchema,
     ErrorResponse,
 )
+from api._helpers import (
+    validate_session_id,
+    safe_session_dir,
+    safe_filename,
+    validate_and_read_upload,
+)
 from services import llm_service
 from services import polisher_service
-from config import TEMP_DIR, MAX_FILE_SIZE, MAX_CONCURRENT_UPLOADS
+from config import MAX_CONCURRENT_UPLOADS
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +36,6 @@ polish_router = APIRouter(prefix="/polish", tags=["Polish"])
 
 # 并发限制信号量：润色涉及 LLM 调用，限制并发保护资源
 _polish_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
-
-# UUID v4 校验正则
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-    re.IGNORECASE,
-)
 
 
 def _check_llm_available():
@@ -50,44 +48,6 @@ def _check_llm_available():
                 message="AI 服务未配置，请检查 DEEPSEEK_API_KEY 环境变量"
             ).model_dump(),
         )
-
-
-def _validate_session_id(session_id: str):
-    """校验 session_id 格式"""
-    if not _UUID_RE.match(session_id):
-        raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="INVALID_SESSION_ID",
-                message="session_id 格式不正确"
-            ).model_dump(),
-        )
-
-
-def _safe_session_dir(session_id: str) -> str:
-    """根据已校验的 session_id 构建安全的 session 目录路径（路径穿越防护）。"""
-    session_dir = Path(TEMP_DIR) / session_id
-    resolved = session_dir.resolve()
-    temp_resolved = Path(TEMP_DIR).resolve()
-    if not str(resolved).startswith(str(temp_resolved)):
-        logger.error(f"[polish] 路径穿越检测: session_id={session_id!r}, resolved={resolved}")
-        raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="INVALID_SESSION_ID",
-                message="session_id 格式不正确"
-            ).model_dump(),
-        )
-    return str(session_dir)
-
-
-def _safe_filename(filename: str) -> str:
-    """清理文件名，移除路径分隔符等危险字符。"""
-    safe = Path(filename).name
-    safe = safe.replace("/", "_").replace("\\", "_").replace("..", "_")
-    if not safe:
-        safe = "document.docx"
-    return safe
 
 
 # ========================================
@@ -104,51 +64,16 @@ async def polish_file(
     """
     _check_llm_available()
 
-    # 验证文件类型
-    if not file.filename or not file.filename.lower().endswith(".docx"):
-        raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="INVALID_FILE_TYPE",
-                message="请上传 .docx 格式的文件"
-            ).model_dump(),
-        )
-
-    # 流式读取文件并验证大小
-    content = bytearray()
-    chunk_size = 64 * 1024
-    while True:
-        chunk = await file.read(chunk_size)
-        if not chunk:
-            break
-        content.extend(chunk)
-        if len(content) > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse(
-                    error="FILE_TOO_LARGE",
-                    message=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）"
-                ).model_dump(),
-            )
-    content = bytes(content)
-
-    # 魔数校验：docx 文件是 ZIP 格式，前 4 字节为 PK\x03\x04
-    if len(content) < 4 or content[:4] != b"PK\x03\x04":
-        raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="INVALID_FILE_CONTENT",
-                message="文件内容无效：不是有效的 .docx 文件（文件可能已损坏或被篡改）"
-            ).model_dump(),
-        )
+    # 验证文件（扩展名、大小、魔数）
+    content = await validate_and_read_upload(file)
 
     # 保存到临时文件（安全路径）
     session_id = str(uuid.uuid4())
-    session_dir = _safe_session_dir(session_id)
+    session_dir = safe_session_dir(session_id)
     os.makedirs(session_dir, exist_ok=True)
 
     # 安全文件名
-    safe_name = _safe_filename(file.filename)
+    safe_name = safe_filename(file.filename)
     filepath = os.path.join(session_dir, safe_name)
     with open(filepath, "wb") as f:
         f.write(content)
@@ -183,7 +108,7 @@ async def polish_file(
 @polish_router.post("/apply", response_model=PolishApplyResponseSchema)
 async def apply_polish(request: PolishApplyRequestSchema):
     """应用用户选中的润色建议，生成修改后的文档。"""
-    _validate_session_id(request.session_id)
+    validate_session_id(request.session_id)
 
     try:
         result = await polisher_service.apply_polish(
@@ -226,7 +151,7 @@ async def apply_polish(request: PolishApplyRequestSchema):
 @polish_router.get("/download/{session_id}")
 async def download_polished_file(session_id: str):
     """下载润色后的 .docx 文件。"""
-    _validate_session_id(session_id)
+    validate_session_id(session_id)
 
     try:
         file_path, filename = polisher_service.get_polished_file(session_id)
