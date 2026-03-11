@@ -7,17 +7,11 @@
 import { Upload } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
+import { formatFileSize } from "../utils/format";
 
 interface FileDropzoneProps {
   selectedFile: File | null;
   onFileChange: (files: Array<UploadFile>) => void;
-}
-
-/** 格式化文件大小 */
-function formatFileSize(size: number): string {
-  return size >= 1024 * 1024
-    ? `${(size / 1024 / 1024).toFixed(1)} MB`
-    : `${(size / 1024).toFixed(1)} KB`;
 }
 
 export default function FileDropzone({ selectedFile, onFileChange }: FileDropzoneProps) {

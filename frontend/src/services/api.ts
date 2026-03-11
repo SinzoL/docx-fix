@@ -12,8 +12,10 @@ import type {
   ErrorResponse,
   ExtractResult,
   AiGenerateRulesResponse,
+  AiReviewConventionsResponse,
   DisputedItem,
   PolishApplyResponse,
+  PolishSessionStatus,
 } from "../types";
 
 const API_BASE = "/api";
@@ -310,14 +312,6 @@ export async function generateRules(
 /**
  * POST /api/ai/review-conventions — 文本排版争议 AI 审查
  */
-export interface AiReviewConventionsResponse {
-  reviews: Array<{
-    id: string;
-    verdict: "confirmed" | "ignored" | "uncertain";
-    reason: string;
-  }>;
-}
-
 export async function reviewConventions(
   sessionId: string,
   disputedItems: DisputedItem[],
@@ -343,6 +337,23 @@ export async function reviewConventions(
 // ========================================
 // 润色相关 API
 // ========================================
+
+/**
+ * GET /api/polish/session/{sessionId}/status — 检查润色 session 是否仍然有效
+ *
+ * 用于前端从 IndexedDB 恢复缓存后验证后端 session 是否还存在。
+ * 不使用重试，快速返回结果。
+ */
+export async function checkPolishSessionStatus(
+  sessionId: string
+): Promise<PolishSessionStatus> {
+  const response = await fetchWithRetry(
+    `${API_BASE}/polish/session/${encodeURIComponent(sessionId)}/status`,
+    undefined,
+    0, // 不重试，快速返回
+  );
+  return handleResponse<PolishSessionStatus>(response);
+}
 
 /**
  * POST /api/polish/apply — 应用用户选中的润色建议

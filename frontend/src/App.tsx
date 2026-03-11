@@ -1,16 +1,22 @@
 /**
  * 应用主组件
  *
- * 定义应用状态机：
- * IDLE → UPLOADING → CHECKING → REPORT_READY → FIXING → FIX_PREVIEW → DOWNLOADED
+ * 设计模式：自定义 Hook 分域 + 顶层状态编排
+ *
+ * 状态机：IDLE → UPLOADING → CHECKING → REPORT_READY → FIXING → FIX_PREVIEW → DOWNLOADED
+ *
+ * 检查/修复逻辑委托给 useCheckFlow Hook，App 仅负责：
+ * - 顶层 appState 状态机
+ * - Tab 导航
+ * - 初始化（清理缓存、规则同步）
+ * - 布局和路由级渲染
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { MessagePlugin } from "tdesign-react";
-import type { AppState, CheckReport, FixReport } from "./types";
-import { fixFile } from "./services/api";
-import { cleanExpired, cleanExpiredPolish, saveHistory, updateFixReport } from "./services/cache";
+import type { AppState } from "./types";
+import { cleanExpired, cleanExpiredPolish } from "./services/cache";
 import { init as initRuleStorage, startCrossTabSync } from "./services/ruleStorage";
+import { useCheckFlow } from "./hooks/useCheckFlow";
 import UploadPanel from "./components/UploadPanel";
 import ExtractPanel from "./components/ExtractPanel";
 import CheckReportView from "./components/CheckReport";
@@ -22,32 +28,19 @@ import { SvgIcon } from "./components/icons/SvgIcon";
 function App() {
   const [appState, setAppState] = useState<AppState>("IDLE");
   const [activeTab, setActiveTab] = useState<"check" | "extract" | "polish">("check");
-  const [sessionId, setSessionId] = useState<string>("");
-  const [selectedRuleId, setSelectedRuleId] = useState<string>("default");
-  const [checkReport, setCheckReport] = useState<CheckReport | null>(null);
-  const [fixReport, setFixReport] = useState<FixReport | null>(null);
-  const [fixLoading, setFixLoading] = useState(false);
-  /** 当前选中的自定义规则 YAML 内容（选择自定义规则时有值） */
-  const [customRulesYaml, setCustomRulesYaml] = useState<string | undefined>(undefined);
-  /** #13: 是否为只读模式（查看历史报告时启用） */
-  const [isReadOnly, setIsReadOnly] = useState(false);
 
-  // 初始化：清理过期缓存
+  // 检查/修复流程 — 委托自定义 Hook 管理
+  const check = useCheckFlow(setAppState);
+
+  // 初始化：清理过期缓存 + 规则同步
   useEffect(() => {
     cleanExpired().then((count) => {
-      if (count > 0) {
-        console.log(`已清理 ${count} 条过期缓存`);
-      }
+      if (count > 0) console.log(`已清理 ${count} 条过期缓存`);
     });
-    // 清理过期的润色缓存
     cleanExpiredPolish().then((count) => {
-      if (count > 0) {
-        console.log(`已清理 ${count} 条过期润色缓存`);
-      }
+      if (count > 0) console.log(`已清理 ${count} 条过期润色缓存`);
     });
-    // 初始化 localStorage 规则存储（清理过期规则）
     initRuleStorage();
-    // 启动跨 Tab 规则同步（T023: 当其他 Tab 修改规则时自动更新）
     const stopSync = startCrossTabSync();
     return () => stopSync();
   }, []);
@@ -55,103 +48,8 @@ function App() {
   // 重置到初始状态
   const handleReset = useCallback(() => {
     setAppState("IDLE");
-    setSessionId("");
-    setCheckReport(null);
-    setFixReport(null);
-    setFixLoading(false);
-    setCustomRulesYaml(undefined);
-    setIsReadOnly(false);
-  }, []);
-
-  // 检查开始回调（UploadPanel 内部已经做了状态管理）
-  const handleCheckStart = useCallback(() => {
-    setAppState("CHECKING");
-  }, []);
-
-  // 检查完成回调
-  const handleCheckComplete = useCallback(
-    (report: CheckReport, sid: string) => {
-      setCheckReport(report);
-      setSessionId(sid);
-      setIsReadOnly(false);
-      setAppState("REPORT_READY");
-
-      // 缓存检查记录到 IndexedDB
-      saveHistory(
-        sid,
-        report.filename,
-        report.rule_id,
-        report.rule_name,
-        report
-      ).catch((err) => {
-        console.warn("缓存检查记录失败:", err);
-      });
-    },
-    []
-  );
-
-  // 上传/检查出错回调
-  const handleCheckError = useCallback(() => {
-    setAppState("IDLE");
-  }, []);
-
-  // 一键修复（#5: 增加防抖保护，fixLoading 为 true 时忽略重复调用）
-  // 006-text-conventions: 接受 includeTextFix 参数，控制是否同时修复文本排版问题
-  const handleFix = useCallback(async (includeTextFix?: boolean) => {
-    if (!sessionId || !selectedRuleId || fixLoading) return;
-
-    setFixLoading(true);
-    setAppState("FIXING");
-
-    try {
-      const report = await fixFile(sessionId, selectedRuleId, customRulesYaml, includeTextFix);
-      setFixReport(report);
-      setAppState("FIX_PREVIEW");
-
-      // 缓存修复报告到 IndexedDB
-      updateFixReport(sessionId, report).catch((err) => {
-        console.warn("缓存修复报告失败:", err);
-      });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "修复失败，请重试";
-      MessagePlugin.error(message);
-      // 修复失败回到报告页面
-      setAppState("REPORT_READY");
-    } finally {
-      setFixLoading(false);
-    }
-  }, [sessionId, selectedRuleId, customRulesYaml, fixLoading]);
-
-  // 下载完成回调
-  const handleDownloadComplete = useCallback(() => {
-    setAppState("DOWNLOADED");
-  }, []);
-
-  // 重新检查回调（规则切换后）
-  const handleRecheck = useCallback(
-    (report: CheckReport) => {
-      setCheckReport(report);
-      setSelectedRuleId(report.rule_id);
-      setFixReport(null);
-    },
-    []
-  );
-
-  // 规则切换回调
-  const handleRuleChange = useCallback((ruleId: string) => {
-    setSelectedRuleId(ruleId);
-  }, []);
-
-  // 查看历史报告回调（#13: 历史报告设为只读模式）
-  const handleViewHistoryReport = useCallback((report: CheckReport) => {
-    setCheckReport(report);
-    setSessionId(report.session_id);
-    setSelectedRuleId(report.rule_id);
-    setIsReadOnly(true);
-    setCustomRulesYaml(undefined);
-    setAppState("REPORT_READY");
-  }, []);
+    check.reset();
+  }, [check]);
 
   return (
     <div className="min-h-screen bg-slate-50 relative overflow-hidden font-sans">
@@ -242,17 +140,17 @@ function App() {
             {/* 根据 Tab 展示不同面板（使用 display 控制保活，避免切换时丢失状态） */}
             <div style={{ display: activeTab === "check" ? "block" : "none" }}>
               <UploadPanel
-                onCheckStart={handleCheckStart}
-                onCheckComplete={handleCheckComplete}
-                onError={handleCheckError}
-                selectedRuleId={selectedRuleId}
-                onRuleChange={handleRuleChange}
-                customRulesYaml={customRulesYaml}
-                onCustomRulesYamlChange={setCustomRulesYaml}
+                onCheckStart={check.handleCheckStart}
+                onCheckComplete={check.handleCheckComplete}
+                onError={check.handleCheckError}
+                selectedRuleId={check.selectedRuleId}
+                onRuleChange={check.handleRuleChange}
+                customRulesYaml={check.customRulesYaml}
+                onCustomRulesYamlChange={check.handleCustomRulesYamlChange}
                 onGoToExtract={() => setActiveTab("extract")}
               />
               <div className="mt-8">
-                <HistoryList onViewReport={handleViewHistoryReport} />
+                <HistoryList onViewReport={check.handleViewHistoryReport} />
               </div>
             </div>
 
@@ -282,17 +180,17 @@ function App() {
         )}
 
         {/* REPORT_READY 状态 — 显示检查报告 */}
-        {appState === "REPORT_READY" && checkReport && (
+        {appState === "REPORT_READY" && check.checkReport && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 mt-4 sm:mt-6">
             <CheckReportView
-              report={checkReport}
-              onFix={handleFix}
-              fixLoading={fixLoading}
-              sessionId={sessionId}
-              onRecheck={handleRecheck}
-              readOnly={isReadOnly}
-              customRulesYaml={customRulesYaml}
-              onCustomRulesYamlChange={setCustomRulesYaml}
+              report={check.checkReport}
+              onFix={check.handleFix}
+              fixLoading={check.fixLoading}
+              sessionId={check.sessionId}
+              onRecheck={check.handleRecheck}
+              readOnly={check.isReadOnly}
+              customRulesYaml={check.customRulesYaml}
+              onCustomRulesYamlChange={check.handleCustomRulesYamlChange}
             />
           </div>
         )}
@@ -313,12 +211,12 @@ function App() {
         )}
 
         {/* FIX_PREVIEW 状态 — 修复预览 */}
-        {appState === "FIX_PREVIEW" && fixReport && (
+        {appState === "FIX_PREVIEW" && check.fixReport && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 mt-4 sm:mt-6">
             <FixPreview
-              report={fixReport}
-              sessionId={sessionId}
-              onDownloadComplete={handleDownloadComplete}
+              report={check.fixReport}
+              sessionId={check.sessionId}
+              onDownloadComplete={check.handleDownloadComplete}
             />
           </div>
         )}

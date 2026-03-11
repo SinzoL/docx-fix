@@ -347,3 +347,10 @@ class PolishApplyResponseSchema(BaseModel):
     filename: str
     applied_count: int
     download_url: str
+
+
+class PolishSessionStatusSchema(BaseModel):
+    """GET /api/polish/session/{session_id}/status 响应"""
+    exists: bool
+    applied: bool = False
+    filename: str = ""

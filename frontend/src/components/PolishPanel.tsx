@@ -20,9 +20,10 @@ import PolishPreview from "./PolishPreview";
 import PolishHistoryList from "./PolishHistoryList";
 import PolishProgress from "./PolishProgress";
 import PolishDone from "./PolishDone";
-import { applyPolish, downloadPolishedFile, triggerDownload } from "../services/api";
+import { applyPolish, downloadPolishedFile, triggerDownload, checkPolishSessionStatus } from "../services/api";
 import { getLatestPolishResult, markPolishApplied } from "../services/cache";
 import { usePolishSSE } from "../hooks/usePolishSSE";
+import { formatFileSize } from "../utils/format";
 
 interface PolishPanelProps {
   onError?: (message: string) => void;
@@ -42,6 +43,8 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [initialDecisions, setInitialDecisions] = useState<Record<number, boolean> | undefined>(undefined);
+  /** session 是否已过期（后端不存在） */
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const { startPolish, abort } = usePolishSSE();
 
@@ -49,15 +52,33 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
   useEffect(() => {
     if (state !== "IDLE" || suggestions.length > 0) return;
 
-    getLatestPolishResult().then((cached) => {
+    getLatestPolishResult().then(async (cached) => {
       if (cached && cached.suggestions.length > 0) {
         setSuggestions(cached.suggestions);
         setSummary(cached.summary);
         setSessionId(cached.id);
         setInitialDecisions(cached.decisions);
-        setIsReadOnly(false);
         setState("POLISH_PREVIEW");
-        MessagePlugin.info("已恢复上次的润色结果");
+
+        // 验证后端 session 是否仍然有效
+        try {
+          const status = await checkPolishSessionStatus(cached.id);
+          if (!status.exists) {
+            // 后端 session 已失效，标记为只读 + 过期
+            setIsReadOnly(true);
+            setSessionExpired(true);
+            MessagePlugin.warning("已恢复润色结果，但后端会话已过期，如需应用修改请重新润色");
+          } else {
+            setIsReadOnly(false);
+            setSessionExpired(false);
+            MessagePlugin.info("已恢复上次的润色结果");
+          }
+        } catch {
+          // 网络不可用时也标记为过期（防御性处理）
+          setIsReadOnly(true);
+          setSessionExpired(true);
+          MessagePlugin.warning("已恢复润色结果，但无法验证会话状态");
+        }
       }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -165,13 +186,32 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
   }, [sessionId]);
 
   // 查看历史润色结果
-  const handleViewHistoryResult = useCallback((record: PolishHistoryRecord) => {
+  const handleViewHistoryResult = useCallback(async (record: PolishHistoryRecord) => {
     setSuggestions(record.suggestions);
     setSummary(record.summary);
     setSessionId(record.id);
     setInitialDecisions(record.decisions);
-    setIsReadOnly(record.applied);
     setState("POLISH_PREVIEW");
+
+    // 已应用的记录只读查看，未应用的需要验证后端 session
+    if (record.applied) {
+      setIsReadOnly(true);
+      setSessionExpired(false);
+    } else {
+      try {
+        const status = await checkPolishSessionStatus(record.id);
+        if (!status.exists) {
+          setIsReadOnly(true);
+          setSessionExpired(true);
+        } else {
+          setIsReadOnly(false);
+          setSessionExpired(false);
+        }
+      } catch {
+        setIsReadOnly(true);
+        setSessionExpired(true);
+      }
+    }
   }, []);
 
   // 重新开始
@@ -185,6 +225,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     setProgress({ current: 0, total: 0 });
     setIsReadOnly(false);
     setInitialDecisions(undefined);
+    setSessionExpired(false);
   }, [abort]);
 
   // ========== 渲染 ==========
@@ -200,6 +241,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         sessionId={sessionId}
         initialDecisions={initialDecisions}
         readOnly={isReadOnly}
+        sessionExpired={sessionExpired}
       />
     );
   }
@@ -262,9 +304,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
                       {selectedFile.name}
                     </p>
                     <p className="text-sm font-medium text-slate-500 mt-1">
-                      {selectedFile.size >= 1024 * 1024
-                        ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
-                        : `${(selectedFile.size / 1024).toFixed(1)} KB`} · 点击或拖拽替换文件
+                      {formatFileSize(selectedFile.size)} · 点击或拖拽替换文件
                     </p>
                   </div>
                 </div>

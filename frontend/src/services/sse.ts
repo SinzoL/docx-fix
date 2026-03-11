@@ -75,18 +75,31 @@ export async function fetchSSE(url: string, options: SSEOptions): Promise<void> 
 
       buffer += decoder.decode(value, { stream: true });
 
-      // 按行解析 SSE 数据
-      const lines = buffer.split("\n");
-      // 保留最后一行（可能不完整）
-      buffer = lines.pop() || "";
+      // SSE 规范：事件以空行（\n\n）分隔
+      const parts = buffer.split("\n\n");
+      // 保留最后一部分（可能不完整）
+      buffer = parts.pop() || "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data: ")) {
-          continue;
+      for (const part of parts) {
+        if (!part.trim()) continue;
+
+        // 解析单个事件：可能包含多个 data: 行，需要拼接
+        const lines = part.split("\n");
+        const dataLines: string[] = [];
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data: ")) {
+            dataLines.push(trimmed.slice(6));
+          } else if (trimmed.startsWith("data:")) {
+            dataLines.push(trimmed.slice(5));
+          }
         }
 
-        const jsonStr = trimmed.slice(6); // 去掉 "data: " 前缀
+        if (dataLines.length === 0) continue;
+
+        // 多行 data: 按 SSE 规范用换行拼接
+        const jsonStr = dataLines.join("\n");
         try {
           const data: SSEToken = JSON.parse(jsonStr);
 
@@ -104,7 +117,7 @@ export async function fetchSSE(url: string, options: SSEOptions): Promise<void> 
             onToken(data.token);
           }
         } catch {
-          // 忽略无法解析的行
+          // 忽略无法解析的事件
         }
       }
     }

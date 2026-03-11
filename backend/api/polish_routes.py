@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from api.schemas import (
     PolishApplyRequestSchema,
     PolishApplyResponseSchema,
+    PolishSessionStatusSchema,
     ErrorResponse,
 )
 from api._helpers import (
@@ -143,6 +144,18 @@ async def apply_polish(request: PolishApplyRequestSchema):
                     message=msg
                 ).model_dump(),
             )
+
+
+# ========================================
+# GET /api/polish/session/{session_id}/status — 检查 session 有效性
+# ========================================
+@polish_router.get("/session/{session_id}/status", response_model=PolishSessionStatusSchema)
+async def check_polish_session_status(session_id: str):
+    """检查润色 session 是否仍然有效（用于前端从缓存恢复后验证）。"""
+    validate_session_id(session_id)
+
+    result = polisher_service.check_session_exists(session_id)
+    return PolishSessionStatusSchema(**result)
 
 
 # ========================================

@@ -209,6 +209,15 @@ export interface AiGenerateRulesResponse {
   warnings: string[];
 }
 
+/** AI 审查争议项响应 */
+export interface AiReviewConventionsResponse {
+  reviews: Array<{
+    id: string;
+    verdict: "confirmed" | "ignored" | "uncertain";
+    reason: string;
+  }>;
+}
+
 // ========================================
 // 模板提取相关
 // ========================================
@@ -328,6 +337,13 @@ export interface PolishApplyResponse {
   filename: string;
   applied_count: number;
   download_url: string;
+}
+
+/** 润色 session 状态检查响应 */
+export interface PolishSessionStatus {
+  exists: boolean;
+  applied: boolean;
+  filename: string;
 }
 
 // ========================================

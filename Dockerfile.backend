@@ -2,21 +2,31 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# 安装系统依赖
+# 安装系统依赖（curl 用于健康检查，体积小且高效）
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件并安装
+# 创建非 root 用户（最小权限原则）
+RUN useradd --create-home --shell /bin/bash --uid 1000 appuser
+
+# 复制依赖文件并安装（以 root 安装依赖）
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制后端代码（包含 scripts/ 和 rules/）
 COPY backend/ ./backend/
 
+# 确保临时目录存在且 appuser 可写
+RUN mkdir -p /tmp/docx-fix && chown -R appuser:appuser /tmp/docx-fix
+
 WORKDIR /app/backend
+
+# 切换到非 root 用户运行
+USER appuser
 
 # 暴露端口
 EXPOSE 8000
 
-# 启动命令
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# 启动命令（单 Worker，避免润色 Session 内存不共享问题）
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

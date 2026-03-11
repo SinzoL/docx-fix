@@ -18,7 +18,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from config import TEMP_DIR, SESSION_EXPIRE_SECONDS, SESSION_CLEANUP_INTERVAL, CORS_ORIGINS, setup_logging  # noqa: E402
+from config import TEMP_DIR, SESSION_EXPIRE_SECONDS, SESSION_CLEANUP_INTERVAL, CORS_ORIGINS, ENABLE_CORS_MIDDLEWARE, setup_logging  # noqa: E402
 from api.routes import router  # noqa: E402
 from api.ai_routes import ai_router  # noqa: E402
 from api.polish_routes import polish_router  # noqa: E402
@@ -82,14 +82,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 配置 — 允许前端开发服务器访问
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS 配置 — 开发环境启用（生产环境由 Nginx 统一处理，避免双重 CORS 头）
+if ENABLE_CORS_MIDDLEWARE:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    logger.info("CORS 中间件已启用（开发模式）")
+else:
+    logger.info("CORS 中间件已跳过（生产模式，由 Nginx 处理）")
 
 # 挂载 API 路由
 app.include_router(router, prefix="/api")

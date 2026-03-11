@@ -10,10 +10,11 @@
  * - 应用选中的修改并下载
  */
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { SvgIcon } from "./icons/SvgIcon";
 import type { PolishSuggestion, PolishSummary } from "../types";
 import { updatePolishDecisions } from "../services/cache";
+import { checkPolishSessionStatus } from "../services/api";
 
 interface PolishPreviewProps {
   suggestions: PolishSuggestion[];
@@ -27,6 +28,8 @@ interface PolishPreviewProps {
   initialDecisions?: Record<number, boolean>;
   /** 只读模式：查看历史记录时不允许修改/应用 */
   readOnly?: boolean;
+  /** session 已过期（后端不存在），只能查看不能应用 */
+  sessionExpired?: boolean;
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -50,6 +53,7 @@ export default function PolishPreview({
   sessionId,
   initialDecisions,
   readOnly = false,
+  sessionExpired = false,
 }: PolishPreviewProps) {
   // 每条建议的接受/拒绝状态：true = 接受, false = 拒绝
   const [decisions, setDecisions] = useState<Record<number, boolean>>(() => {
@@ -62,6 +66,20 @@ export default function PolishPreview({
     suggestions.forEach((_, i) => { initial[i] = true; });
     return initial;
   });
+
+  // 心跳续命：每 15 分钟自动 touch session，防止用户长时间查看时 session 过期
+  useEffect(() => {
+    if (!sessionId || readOnly || sessionExpired) return;
+
+    const HEARTBEAT_INTERVAL = 15 * 60 * 1000; // 15 分钟
+    const timer = setInterval(() => {
+      checkPolishSessionStatus(sessionId).catch(() => {
+        // 心跳失败不影响用户操作，静默处理
+      });
+    }, HEARTBEAT_INTERVAL);
+
+    return () => clearInterval(timer);
+  }, [sessionId, readOnly, sessionExpired]);
 
   // 防抖定时器，避免频繁写入 IndexedDB
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,7 +159,11 @@ export default function PolishPreview({
                   {readOnly ? "润色结果查看" : "内容润色预览"}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {readOnly ? "查看历史润色结果（只读）" : "审阅每条建议，选择接受或拒绝"}
+                  {sessionExpired
+                    ? "后端会话已过期，仅可查看结果。如需应用修改请重新润色"
+                    : readOnly
+                      ? "查看历史润色结果（只读）"
+                      : "审阅每条建议，选择接受或拒绝"}
                 </p>
               </div>
             </div>
@@ -152,6 +174,18 @@ export default function PolishPreview({
               ← 返回
             </button>
           </div>
+
+          {/* session 过期警告横幅 */}
+          {sessionExpired && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              <div className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200/60 text-xs text-amber-700">
+                <SvgIcon name="alert-triangle" size={14} className="flex-shrink-0" />
+                <span>
+                  <strong>后端会话已过期</strong>：服务重启或超时导致会话数据丢失。您仍可查看润色建议，但无法应用修改和下载。请返回重新润色以生成新的会话。
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* 统计标签 */}
           {summary && (
@@ -346,12 +380,22 @@ export default function PolishPreview({
             )}
           </span>
           {readOnly ? (
-            <button
-              onClick={onBack}
-              className="px-8 py-2.5 rounded-xl font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-sm transition-all cursor-pointer"
-            >
-              返回列表
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={onBack}
+                className="px-8 py-2.5 rounded-xl font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-sm transition-all cursor-pointer"
+              >
+                返回列表
+              </button>
+              {sessionExpired && (
+                <button
+                  onClick={onBack}
+                  className="px-8 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-lg hover:shadow-violet-500/30 hover:-translate-y-0.5 transition-all cursor-pointer"
+                >
+                  重新润色
+                </button>
+              )}
+            </div>
           ) : (
             <button
               onClick={handleApply}

@@ -8,6 +8,7 @@ import { Upload } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
 import { SvgIcon } from "./icons/SvgIcon";
+import { formatFileSize } from "../utils/format";
 
 interface ExtractUploadModeProps {
   selectedFile: File | null;
@@ -72,9 +73,7 @@ export default function ExtractUploadMode({
                     {selectedFile.name}
                   </p>
                   <p className="text-sm font-medium text-slate-500 mt-1">
-                    {selectedFile.size >= 1024 * 1024
-                      ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
-                      : `${(selectedFile.size / 1024).toFixed(1)} KB`} ·
+                    {formatFileSize(selectedFile.size)} ·
                     点击或拖拽替换文件
                   </p>
                 </div>

@@ -60,6 +60,9 @@ LLM_DEFAULT_TEMPERATURE = 0.3  # 偏低温度，输出更稳定
 # CORS 配置
 # ========================================
 
+# 运行环境：production（生产）/ development（开发）
+ENV = os.environ.get("ENV", "development")
+
 # 从环境变量读取额外的 CORS 域名（逗号分隔）
 _extra_origins = os.environ.get("CORS_EXTRA_ORIGINS", "")
 
@@ -69,6 +72,9 @@ CORS_ORIGINS = [
     "https://do-not-go-to.icu",
     "https://www.do-not-go-to.icu",
 ] + [o.strip() for o in _extra_origins.split(",") if o.strip()]
+
+# 生产环境中 CORS 由 Nginx 处理，FastAPI 无需添加 CORS 头（避免双重头冲突）
+ENABLE_CORS_MIDDLEWARE = ENV != "production"
 
 
 # ========================================
