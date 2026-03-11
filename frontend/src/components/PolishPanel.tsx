@@ -228,6 +228,21 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     setSessionExpired(false);
   }, [abort]);
 
+  // 重新润色：回到 IDLE 状态但保留已选文件，用户可直接点击"开始润色"
+  const handleRePolish = useCallback(() => {
+    abort();
+    setState("IDLE");
+    // 保留 selectedFile，不清空！用户回到上传页面后可直接点击开始
+    setSuggestions([]);
+    setSummary(null);
+    setSessionId("");
+    setProgress({ current: 0, total: 0 });
+    setIsReadOnly(false);
+    setInitialDecisions(undefined);
+    setSessionExpired(false);
+    MessagePlugin.info("请上传文件后点击「开始内容润色」");
+  }, [abort]);
+
   // ========== 渲染 ==========
 
   if (state === "POLISH_PREVIEW" || state === "APPLYING") {
@@ -237,6 +252,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         summary={summary}
         onApply={handleApplyAndDownload}
         onBack={handleReset}
+        onRePolish={handleRePolish}
         applying={state === "APPLYING"}
         sessionId={sessionId}
         initialDecisions={initialDecisions}

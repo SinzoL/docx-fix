@@ -21,6 +21,8 @@ interface PolishPreviewProps {
   summary: PolishSummary | null;
   onApply: (acceptedIndices: number[]) => void;
   onBack: () => void;
+  /** 重新润色（回到上传页面并保留文件） */
+  onRePolish?: () => void;
   applying?: boolean;
   /** 从缓存恢复的 session_id，用于持久化决策 */
   sessionId?: string;
@@ -49,6 +51,7 @@ export default function PolishPreview({
   summary,
   onApply,
   onBack,
+  onRePolish,
   applying = false,
   sessionId,
   initialDecisions,
@@ -389,7 +392,7 @@ export default function PolishPreview({
               </button>
               {sessionExpired && (
                 <button
-                  onClick={onBack}
+                  onClick={onRePolish ?? onBack}
                   className="px-8 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 shadow-lg hover:shadow-violet-500/30 hover:-translate-y-0.5 transition-all cursor-pointer"
                 >
                   重新润色
