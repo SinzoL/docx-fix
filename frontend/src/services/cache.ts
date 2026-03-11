@@ -336,6 +336,35 @@ export async function markPolishApplied(sessionId: string): Promise<void> {
 }
 
 /**
+ * 获取所有润色历史记录（按创建时间降序，包括已应用和未应用的）
+ */
+export async function getPolishHistoryList(): Promise<PolishHistoryRecord[]> {
+  try {
+    const db = await getDB();
+    const all = await db.getAll(POLISH_STORE_NAME);
+    const now = Date.now();
+    // 过滤未过期的记录，按创建时间降序
+    return all
+      .filter((r: PolishHistoryRecord) => r.expires_at > now)
+      .sort((a: PolishHistoryRecord, b: PolishHistoryRecord) => b.created_at - a.created_at);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 删除单条润色历史记录
+ */
+export async function deletePolishHistory(sessionId: string): Promise<void> {
+  try {
+    const db = await getDB();
+    await db.delete(POLISH_STORE_NAME, sessionId);
+  } catch (error) {
+    console.warn("删除润色历史失败:", error);
+  }
+}
+
+/**
  * 清理过期的润色缓存
  */
 export async function cleanExpiredPolish(): Promise<number> {

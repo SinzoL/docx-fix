@@ -13,8 +13,9 @@ import { Upload, MessagePlugin } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
 import { SvgIcon } from "./icons/SvgIcon";
-import type { PolishSuggestion, PolishSummary } from "../types";
+import type { PolishSuggestion, PolishSummary, PolishHistoryRecord } from "../types";
 import PolishPreview from "./PolishPreview";
+import PolishHistoryList from "./PolishHistoryList";
 import { applyPolish, downloadPolishedFile, triggerDownload } from "../services/api";
 import { savePolishResult, getLatestPolishResult, markPolishApplied } from "../services/cache";
 
@@ -33,6 +34,12 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [totalParagraphs, setTotalParagraphs] = useState(0);
   const [polishableParagraphs, setPolishableParagraphs] = useState(0);
+  /** 历史列表刷新触发器 */
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  /** 是否为只读模式（查看历史润色记录时） */
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  /** 从历史记录恢复的决策 */
+  const [initialDecisions, setInitialDecisions] = useState<Record<number, boolean> | undefined>(undefined);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -46,6 +53,8 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         setSuggestions(cached.suggestions);
         setSummary(cached.summary);
         setSessionId(cached.id);
+        setInitialDecisions(cached.decisions);
+        setIsReadOnly(false);
         setState("POLISH_PREVIEW");
         MessagePlugin.info("已恢复上次的润色结果");
       }
@@ -202,10 +211,15 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
                     selectedFile?.name || "unknown.docx",
                     data.suggestions,
                     data.summary || null,
-                  ).catch((err: unknown) => {
+                  ).then(() => {
+                    // 刷新历史列表
+                    setHistoryRefreshKey(k => k + 1);
+                  }).catch((err: unknown) => {
                     console.warn("缓存润色结果失败:", err);
                   });
                 }
+                setIsReadOnly(false);
+                setInitialDecisions(undefined);
                 break;
 
               case "error":
@@ -243,14 +257,27 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
       setState("DONE");
       MessagePlugin.success(`已应用 ${result.applied_count} 条修改并下载`);
 
-      // 标记缓存为已应用
-      markPolishApplied(sessionId).catch(() => {});
+      // 标记缓存为已应用并刷新历史列表
+      markPolishApplied(sessionId).then(() => {
+        setHistoryRefreshKey(k => k + 1);
+      }).catch(() => {});
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "应用修改失败";
       MessagePlugin.error(message);
       setState("POLISH_PREVIEW");
     }
   }, [sessionId]);
+
+  // 查看历史润色结果
+  const handleViewHistoryResult = useCallback((record: PolishHistoryRecord) => {
+    setSuggestions(record.suggestions);
+    setSummary(record.summary);
+    setSessionId(record.id);
+    setInitialDecisions(record.decisions);
+    // 已应用的记录只读查看，未应用的记录可以继续操作
+    setIsReadOnly(record.applied);
+    setState("POLISH_PREVIEW");
+  }, []);
 
   // 重新开始
   const handleReset = useCallback(() => {
@@ -263,6 +290,8 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     setSummary(null);
     setSessionId("");
     setProgress({ current: 0, total: 0 });
+    setIsReadOnly(false);
+    setInitialDecisions(undefined);
   }, []);
 
   // 组件卸载时取消 SSE 请求，避免后端继续调用 LLM
@@ -282,26 +311,35 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         onBack={handleReset}
         applying={state === "APPLYING"}
         sessionId={sessionId}
+        initialDecisions={initialDecisions}
+        readOnly={isReadOnly}
       />
     );
   }
 
   if (state === "DONE") {
     return (
-      <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg mx-auto animate-in fade-in zoom-in-95 duration-500">
-        <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-tr from-green-400 to-emerald-500 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-6 sm:mb-8 animate-bounce">
-          <span className="text-3xl sm:text-4xl text-white">✓</span>
+      <div className="space-y-8">
+        <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg mx-auto animate-in fade-in zoom-in-95 duration-500">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-tr from-green-400 to-emerald-500 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-6 sm:mb-8 animate-bounce">
+            <span className="text-3xl sm:text-4xl text-white">✓</span>
+          </div>
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2 sm:mb-3 font-display">润色完成！</h3>
+          <p className="text-base sm:text-lg text-slate-600">
+            润色后的文档已下载到本地
+          </p>
+          <button
+            onClick={handleReset}
+            className="mt-8 px-8 py-3 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
+          >
+            润色新文档
+          </button>
         </div>
-        <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-2 sm:mb-3 font-display">润色完成！</h3>
-        <p className="text-base sm:text-lg text-slate-600">
-          润色后的文档已下载到本地
-        </p>
-        <button
-          onClick={handleReset}
-          className="mt-8 px-8 py-3 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
-        >
-          润色新文档
-        </button>
+        {/* 润色历史 */}
+        <PolishHistoryList
+          onViewResult={handleViewHistoryResult}
+          refreshKey={historyRefreshKey}
+        />
       </div>
     );
   }
@@ -440,6 +478,16 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
           </div>
         )}
       </div>
+
+      {/* 润色历史记录（IDLE 状态显示） */}
+      {(state === "IDLE") && (
+        <div className="mt-8">
+          <PolishHistoryList
+            onViewResult={handleViewHistoryResult}
+            refreshKey={historyRefreshKey}
+          />
+        </div>
+      )}
     </div>
   );
 }

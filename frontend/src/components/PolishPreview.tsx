@@ -25,6 +25,8 @@ interface PolishPreviewProps {
   sessionId?: string;
   /** 从缓存恢复的初始决策 */
   initialDecisions?: Record<number, boolean>;
+  /** 只读模式：查看历史记录时不允许修改/应用 */
+  readOnly?: boolean;
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -47,6 +49,7 @@ export default function PolishPreview({
   applying = false,
   sessionId,
   initialDecisions,
+  readOnly = false,
 }: PolishPreviewProps) {
   // 每条建议的接受/拒绝状态：true = 接受, false = 拒绝
   const [decisions, setDecisions] = useState<Record<number, boolean>>(() => {
@@ -134,9 +137,11 @@ export default function PolishPreview({
                 <SvgIcon name="edit" size={20} />
               </span>
               <div>
-                <h3 className="text-lg font-bold text-slate-800 font-display">内容润色预览</h3>
+                <h3 className="text-lg font-bold text-slate-800 font-display">
+                  {readOnly ? "润色结果查看" : "内容润色预览"}
+                </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  审阅每条建议，选择接受或拒绝
+                  {readOnly ? "查看历史润色结果（只读）" : "审阅每条建议，选择接受或拒绝"}
                 </p>
               </div>
             </div>
@@ -210,21 +215,23 @@ export default function PolishPreview({
             ))}
           </div>
 
-          {/* 批量操作 */}
-          <div className="flex gap-2">
-            <button
-              onClick={handleAcceptAll}
-              className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200/60 hover:bg-emerald-100 transition-all cursor-pointer inline-flex items-center gap-1"
-            >
-              <SvgIcon name="check-circle" size={12} /> 全部接受
-            </button>
-            <button
-              onClick={handleRejectAll}
-              className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-500 border border-red-200/60 hover:bg-red-100 transition-all cursor-pointer inline-flex items-center gap-1"
-            >
-              <SvgIcon name="x-circle" size={12} /> 全部拒绝
-            </button>
-          </div>
+          {/* 批量操作（只读模式隐藏） */}
+          {!readOnly && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleAcceptAll}
+                className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200/60 hover:bg-emerald-100 transition-all cursor-pointer inline-flex items-center gap-1"
+              >
+                <SvgIcon name="check-circle" size={12} /> 全部接受
+              </button>
+              <button
+                onClick={handleRejectAll}
+                className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-500 border border-red-200/60 hover:bg-red-100 transition-all cursor-pointer inline-flex items-center gap-1"
+              >
+                <SvgIcon name="x-circle" size={12} /> 全部拒绝
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 建议列表 */}
@@ -263,28 +270,38 @@ export default function PolishPreview({
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => handleDecision(index, true)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-0.5 ${
-                        isAccepted
-                          ? "bg-emerald-500 text-white shadow-sm"
-                          : "bg-white text-emerald-500 border border-emerald-200 hover:bg-emerald-50"
-                      }`}
-                    >
-                      <SvgIcon name="check" size={12} /> 接受
-                    </button>
-                    <button
-                      onClick={() => handleDecision(index, false)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-0.5 ${
-                        !isAccepted
-                          ? "bg-red-500 text-white shadow-sm"
-                          : "bg-white text-red-400 border border-red-200 hover:bg-red-50"
-                      }`}
-                    >
-                      <SvgIcon name="x" size={12} /> 拒绝
-                    </button>
-                  </div>
+                  {!readOnly ? (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => handleDecision(index, true)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-0.5 ${
+                          isAccepted
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "bg-white text-emerald-500 border border-emerald-200 hover:bg-emerald-50"
+                        }`}
+                      >
+                        <SvgIcon name="check" size={12} /> 接受
+                      </button>
+                      <button
+                        onClick={() => handleDecision(index, false)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-0.5 ${
+                          !isAccepted
+                            ? "bg-red-500 text-white shadow-sm"
+                            : "bg-white text-red-400 border border-red-200 hover:bg-red-50"
+                        }`}
+                      >
+                        <SvgIcon name="x" size={12} /> 拒绝
+                      </button>
+                    </div>
+                  ) : (
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold inline-flex items-center gap-0.5 ${
+                      isAccepted
+                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                        : "bg-red-50 text-red-500 border border-red-200"
+                    }`}>
+                      {isAccepted ? <><SvgIcon name="check" size={12} /> 已接受</> : <><SvgIcon name="x" size={12} /> 已拒绝</>}
+                    </span>
+                  )}
                 </div>
 
                 {/* Diff 对比 */}
@@ -322,19 +339,32 @@ export default function PolishPreview({
         {/* 底部操作栏 */}
         <div className="p-4 sm:p-5 bg-slate-50/50 border-t border-slate-200/50 flex items-center justify-between">
           <span className="text-sm text-slate-500">
-            已接受 <span className="font-bold text-emerald-600">{acceptedCount}</span> / {suggestions.length} 条修改
+            {readOnly ? (
+              <>已接受 <span className="font-bold text-emerald-600">{acceptedCount}</span> / {suggestions.length} 条修改</>
+            ) : (
+              <>已选择 <span className="font-bold text-emerald-600">{acceptedCount}</span> / {suggestions.length} 条修改</>
+            )}
           </span>
-          <button
-            onClick={handleApply}
-            disabled={acceptedCount === 0 || applying}
-            className={`px-8 py-2.5 rounded-xl font-semibold text-white shadow-lg transition-all duration-300 ${
-              acceptedCount === 0 || applying
-                ? "bg-slate-300 shadow-none cursor-not-allowed opacity-70"
-                : "bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 hover:shadow-violet-500/30 hover:-translate-y-0.5 cursor-pointer"
-            }`}
-          >
-            {applying ? "正在应用..." : `应用选中的修改并下载 (${acceptedCount})`}
-          </button>
+          {readOnly ? (
+            <button
+              onClick={onBack}
+              className="px-8 py-2.5 rounded-xl font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-sm transition-all cursor-pointer"
+            >
+              返回列表
+            </button>
+          ) : (
+            <button
+              onClick={handleApply}
+              disabled={acceptedCount === 0 || applying}
+              className={`px-8 py-2.5 rounded-xl font-semibold text-white shadow-lg transition-all duration-300 ${
+                acceptedCount === 0 || applying
+                  ? "bg-slate-300 shadow-none cursor-not-allowed opacity-70"
+                  : "bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 hover:shadow-violet-500/30 hover:-translate-y-0.5 cursor-pointer"
+              }`}
+            >
+              {applying ? "正在应用..." : `应用选中的修改并下载 (${acceptedCount})`}
+            </button>
+          )}
         </div>
       </div>
     </div>
