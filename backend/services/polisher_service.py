@@ -19,6 +19,7 @@ from config import TEMP_DIR
 from scripts.polisher.text_extractor import TextExtractor, ParagraphSnapshot
 from scripts.polisher.polish_engine import PolishEngine, PolishSuggestion
 from scripts.polisher.text_writer import TextWriter
+from scripts.polisher.rule_scanner import RuleScanner
 
 logger = logging.getLogger(__name__)
 
@@ -67,29 +68,61 @@ async def polish_file(
         "applied": False,
     }
 
-    # 3. 分批润色（SSE 流式）
+    # 3. 规则扫描阶段（毫秒级，先于 LLM 润色）
+    rule_scanner = RuleScanner()
+    rule_suggestions = rule_scanner.scan_document(doc, snapshots)
+
+    if rule_suggestions:
+        logger.info(
+            f"[{session_id}] 规则扫描检出 {len(rule_suggestions)} 条建议"
+        )
+        yield _format_sse("rule_scan_complete", {
+            "suggestions": rule_suggestions,
+            "count": len(rule_suggestions),
+        })
+
+    # 4. 分批 LLM 润色（SSE 流式）
     engine = PolishEngine(
         enable_reviewer=enable_reviewer,
         batch_size=5,
         context_window=2,
     )
 
+    llm_suggestions: list[dict] = []
+
     async for event in engine.polish_document(snapshots):
         event_name = event["event"]
         event_data = event["data"]
 
-        # 收集所有建议
+        # 收集 LLM 建议
+        if event_name == "batch_complete":
+            batch_suggestions = event_data.get("suggestions", [])
+            llm_suggestions.extend(batch_suggestions)
+
         if event_name == "complete":
-            # 将 suggestions 存入 session
-            suggestions_data = event_data.get("suggestions", [])
-            _sessions[session_id]["suggestions_data"] = suggestions_data
-            # 注入 session_id 和 filename
+            # 用 complete 事件中的完整 suggestions
+            llm_suggestions = event_data.get("suggestions", [])
+
+            # 5. 合并规则建议 + LLM 建议
+            all_suggestions = _merge_suggestions(rule_suggestions, llm_suggestions)
+
+            # 重新构建 summary（包含合并后的统计）
+            merged_summary = _build_merged_summary(
+                event_data.get("summary", {}),
+                rule_suggestions,
+                all_suggestions,
+            )
+
+            # 将合并后的数据存入 session
+            _sessions[session_id]["suggestions_data"] = all_suggestions
+            event_data["suggestions"] = all_suggestions
+            event_data["summary"] = merged_summary
             event_data["session_id"] = session_id
             event_data["filename"] = filename
 
         yield _format_sse(event_name, event_data)
 
-    logger.info(f"[{session_id}] 润色完成")
+    logger.info(f"[{session_id}] 润色完成（规则 {len(rule_suggestions)} + LLM {len(llm_suggestions)} → 合并 {len(_sessions[session_id].get('suggestions_data', []))} 条）")
 
 
 async def apply_polish(
@@ -192,3 +225,99 @@ def _format_sse(event: str, data: dict) -> str:
     """格式化为 SSE 字符串"""
     json_str = json.dumps(data, ensure_ascii=False)
     return f"event: {event}\ndata: {json_str}\n\n"
+
+
+def _merge_suggestions(
+    rule_suggestions: list[dict],
+    llm_suggestions: list[dict],
+) -> list[dict]:
+    """合并规则建议和 LLM 建议，处理冲突去重。
+
+    去重策略：
+    1. 不同段落 → 直接合并
+    2. 同段落 + 不同类型修改 → 两条都保留
+    3. 同段落 + 同类型（都改标点等）→ 优先保留 LLM 的（更全面）
+
+    排序策略：按段落索引排序，同段落内规则建议排在前。
+
+    Returns:
+        合并后的建议列表
+    """
+    if not rule_suggestions and not llm_suggestions:
+        return []
+    if not rule_suggestions:
+        return llm_suggestions
+    if not llm_suggestions:
+        return rule_suggestions
+
+    # 构建 LLM 建议的段落索引 → 类型集合 映射
+    llm_by_para: dict[int, dict[str, dict]] = {}
+    for s in llm_suggestions:
+        para_idx = s.get("paragraph_index", -1)
+        change_type = s.get("change_type", "")
+        if para_idx not in llm_by_para:
+            llm_by_para[para_idx] = {}
+        llm_by_para[para_idx][change_type] = s
+
+    # 过滤规则建议：如果 LLM 已经对同段落做了相同类型的修改，跳过规则建议
+    # 映射规则类型 → LLM 类型
+    rule_type_overlap = {
+        "rule_punctuation": "punctuation",
+        "rule_space": "wording",     # LLM 可能在用词优化中处理空格
+        "rule_fullwidth": "punctuation",
+    }
+
+    filtered_rules: list[dict] = []
+    for rs in rule_suggestions:
+        para_idx = rs.get("paragraph_index", -1)
+        rule_type = rs.get("change_type", "")
+        llm_types = llm_by_para.get(para_idx, {})
+
+        # 检查 LLM 是否已对同段落做了涵盖性修改
+        mapped_llm_type = rule_type_overlap.get(rule_type)
+        if mapped_llm_type and mapped_llm_type in llm_types:
+            # LLM 已做了对应修改，跳过规则建议
+            continue
+        filtered_rules.append(rs)
+
+    # 合并并排序
+    all_suggestions = filtered_rules + llm_suggestions
+    all_suggestions.sort(key=lambda s: (s.get("paragraph_index", 0), 0 if s.get("source") == "rule" else 1))
+
+    return all_suggestions
+
+
+def _build_merged_summary(
+    llm_summary: dict,
+    rule_suggestions: list[dict],
+    all_suggestions: list[dict],
+) -> dict:
+    """构建合并后的统计信息。
+
+    基于 LLM 的 summary，加入规则建议的统计。
+
+    Returns:
+        合并后的 summary dict
+    """
+    summary = dict(llm_summary) if llm_summary else {}
+
+    # 重新计算 by_type
+    by_type: dict[str, int] = {}
+    for s in all_suggestions:
+        ct = s.get("change_type", "unknown")
+        by_type[ct] = by_type.get(ct, 0) + 1
+    summary["by_type"] = by_type
+
+    # 更新 total_suggestions
+    summary["total_suggestions"] = len(all_suggestions)
+
+    # 更新 modified_paragraphs（去重段落索引）
+    para_indices = set(s.get("paragraph_index", -1) for s in all_suggestions)
+    summary["modified_paragraphs"] = len(para_indices)
+
+    # 新增 by_source 统计
+    rule_count = sum(1 for s in all_suggestions if s.get("source") == "rule")
+    llm_count = sum(1 for s in all_suggestions if s.get("source") != "rule")
+    summary["by_source"] = {"rule": rule_count, "llm": llm_count}
+
+    return summary

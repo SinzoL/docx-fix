@@ -12,10 +12,12 @@ from scripts.polisher.text_extractor import TextExtractor, ParagraphSnapshot, Ru
 from scripts.polisher.polish_engine import PolishEngine, PolishSuggestion, ChangeDetail
 from scripts.polisher.diff_calculator import DiffCalculator
 from scripts.polisher.text_writer import TextWriter
+from scripts.polisher.rule_scanner import RuleScanner
 
 __all__ = [
     'TextExtractor', 'ParagraphSnapshot', 'RunInfo',
     'PolishEngine', 'PolishSuggestion', 'ChangeDetail',
     'DiffCalculator',
     'TextWriter',
+    'RuleScanner',
 ]

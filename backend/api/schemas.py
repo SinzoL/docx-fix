@@ -294,7 +294,7 @@ class ExtractRulesResponse(BaseModel):
 
 class ChangeDetailSchema(BaseModel):
     """单个修改点的详情"""
-    type: str  # "grammar" | "wording" | "punctuation" | "structure" | "academic"
+    type: str  # "grammar" | "wording" | "punctuation" | "structure" | "academic" | "typo" | "rule_punctuation" | "rule_space" | "rule_fullwidth"
     original: str
     revised: str
     explanation: str
@@ -305,12 +305,13 @@ class PolishSuggestionSchema(BaseModel):
     paragraph_index: int
     original_text: str
     polished_text: str
-    change_type: str  # "grammar" | "wording" | "punctuation" | "structure" | "academic"
+    change_type: str  # "grammar" | "wording" | "punctuation" | "structure" | "academic" | "typo" | "rule_punctuation" | "rule_space" | "rule_fullwidth"
     changes: list[ChangeDetailSchema]
     explanation: str
     confidence: float
     semantic_warning: bool = False
     semantic_warning_text: Optional[str] = None
+    source: str = "llm"  # "llm" | "rule"
 
 
 class PolishSummarySchema(BaseModel):
@@ -322,6 +323,7 @@ class PolishSummarySchema(BaseModel):
     total_suggestions: int
     by_type: dict[str, int]
     semantic_warnings: int
+    by_source: Optional[dict[str, int]] = None  # {"rule": N, "llm": N}
 
 
 class PolishReportSchema(BaseModel):

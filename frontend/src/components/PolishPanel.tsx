@@ -121,6 +121,13 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
             const data = JSON.parse(eventData);
 
             switch (eventName) {
+              case "rule_scan_complete":
+                // 规则扫描完成（毫秒级，先于 LLM 润色结果）
+                if (data.suggestions && data.suggestions.length > 0) {
+                  setSuggestions(prev => [...prev, ...data.suggestions]);
+                }
+                break;
+
               case "progress":
                 setProgress({ current: 0, total: data.total_batches || 0 });
                 setTotalParagraphs(data.total_paragraphs || 0);
@@ -333,7 +340,8 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
                 {suggestions.slice(-3).map((s, i) => (
                   <div key={i} className="text-xs bg-white/60 rounded-lg p-2 border border-slate-200/50">
                     <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-600 mr-1">
-                      {s.change_type === 'grammar' ? '语病' : s.change_type === 'wording' ? '用词' : s.change_type === 'punctuation' ? '标点' : s.change_type === 'structure' ? '句式' : '学术'}
+                      {s.source === 'rule' ? '🔧 ' : '🤖 '}
+                      {s.change_type === 'grammar' ? '语病' : s.change_type === 'wording' ? '用词' : s.change_type === 'punctuation' ? '标点' : s.change_type === 'structure' ? '句式' : s.change_type === 'typo' ? '错别字' : s.change_type === 'rule_punctuation' ? '标点' : s.change_type === 'rule_space' ? '空格' : s.change_type === 'rule_fullwidth' ? '全半角' : '学术'}
                     </span>
                     <span className="text-slate-600 line-through">{s.original_text.slice(0, 30)}...</span>
                   </div>

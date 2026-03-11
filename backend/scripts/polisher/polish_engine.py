@@ -46,6 +46,7 @@ class PolishSuggestion:
     confidence: float = 0.8                 # 置信度
     semantic_warning: bool = False          # Reviewer 是否标记语义偏移
     semantic_warning_text: Optional[str] = None  # 语义偏移说明
+    source: str = "llm"                      # 建议来源: "llm"(LLM润色) | "rule"(规则引擎)
 
 
 class PolishEngine:
@@ -393,6 +394,7 @@ class PolishEngine:
             "confidence": suggestion.confidence,
             "semantic_warning": suggestion.semantic_warning,
             "semantic_warning_text": suggestion.semantic_warning_text,
+            "source": suggestion.source,
         }
 
     @staticmethod

@@ -328,6 +328,7 @@ POLISH_SYSTEM_PROMPT = """你是一个专业的中文学术论文润色助手。
 3. 标点规范（punctuation）：中英文标点统一、全角半角规范
 4. 句式优化（structure）：过长句子拆分、补充逻辑连接词
 5. 学术规范（academic）：术语统一、数字表达规范
+6. 错别字修正（typo）：常见的同音字/形近字错误，如"以经"→"已经"、"在次"→"再次"、"以至于"→"以致于"、"不胜枚举"→"不胜枚举"
 
 ## 严格约束
 - ❌ 不得改变原文的论点、论据和结论
@@ -357,7 +358,7 @@ POLISH_SYSTEM_PROMPT = """你是一个专业的中文学术论文润色助手。
 注意：
 - index 对应输入中 [段落N] 的编号（从 0 开始）
 - 如果某段落无需修改，设置 modified=false，changes 为空数组，polished 为原文
-- changes 中的 type 必须是以下之一：grammar、wording、punctuation、structure、academic
+- changes 中的 type 必须是以下之一：grammar、wording、punctuation、structure、academic、typo
 - 只输出 JSON，不要附加任何解释文字"""
 
 

@@ -27,6 +27,10 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> 
   punctuation: { label: "标点修正", color: "text-amber-600", bg: "bg-amber-50 border-amber-200/60" },
   structure: { label: "句式优化", color: "text-purple-600", bg: "bg-purple-50 border-purple-200/60" },
   academic: { label: "学术规范", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200/60" },
+  typo: { label: "错别字", color: "text-orange-600", bg: "bg-orange-50 border-orange-200/60" },
+  rule_punctuation: { label: "标点问题", color: "text-amber-700", bg: "bg-amber-50/80 border-amber-300/60" },
+  rule_space: { label: "多余空格", color: "text-cyan-600", bg: "bg-cyan-50 border-cyan-200/60" },
+  rule_fullwidth: { label: "全半角", color: "text-teal-600", bg: "bg-teal-50 border-teal-200/60" },
 };
 
 export default function PolishPreview({
@@ -116,6 +120,16 @@ export default function PolishPreview({
               <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
                 共 {summary.total_suggestions} 条建议
               </span>
+              {summary.by_source && (
+                <>
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-cyan-50 border border-cyan-200/60 text-cyan-600">
+                    🔧 规则检出 {summary.by_source.rule}
+                  </span>
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-violet-50 border border-violet-200/60 text-violet-600">
+                    🤖 AI 检出 {summary.by_source.llm}
+                  </span>
+                </>
+              )}
               {Object.entries(summary.by_type).map(([type, count]) => {
                 const info = TYPE_LABELS[type] || { label: type, color: "text-slate-600", bg: "bg-slate-50 border-slate-200" };
                 return (
@@ -204,7 +218,7 @@ export default function PolishPreview({
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${typeInfo.bg} ${typeInfo.color}`}>
-                      {typeInfo.label}
+                      {suggestion.source === "rule" ? "🔧 " : "🤖 "}{typeInfo.label}
                     </span>
                     <span className="text-xs text-slate-400">
                       第 {suggestion.paragraph_index + 1} 段

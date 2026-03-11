@@ -264,7 +264,12 @@ export interface CustomRule {
 // ========================================
 
 /** 润色修改类型 */
-export type PolishChangeType = "grammar" | "wording" | "punctuation" | "structure" | "academic";
+export type PolishChangeType =
+  | "grammar" | "wording" | "punctuation" | "structure" | "academic"
+  | "typo"              // 错别字（LLM 检出）
+  | "rule_punctuation"  // 标点问题（规则检出）
+  | "rule_space"        // 空格问题（规则检出）
+  | "rule_fullwidth";   // 全半角问题（规则检出）
 
 /** 单个修改点的详情 */
 export interface ChangeDetail {
@@ -285,6 +290,8 @@ export interface PolishSuggestion {
   confidence: number;
   semantic_warning: boolean;
   semantic_warning_text: string | null;
+  /** 建议来源: "llm"(LLM润色) | "rule"(规则引擎) */
+  source?: "llm" | "rule";
 }
 
 /** 润色统计信息 */
@@ -296,6 +303,8 @@ export interface PolishSummary {
   total_suggestions: number;
   by_type: Record<string, number>;
   semantic_warnings: number;
+  /** 按来源分组统计 */
+  by_source?: { rule: number; llm: number };
 }
 
 /** 完整润色报告 */
