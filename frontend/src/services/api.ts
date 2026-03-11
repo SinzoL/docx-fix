@@ -16,6 +16,7 @@ import type {
   DisputedItem,
   PolishApplyResponse,
   PolishSessionStatus,
+  CheckSessionStatus,
 } from "../types";
 
 const API_BASE = "/api";
@@ -332,6 +333,27 @@ export async function reviewConventions(
   });
 
   return handleResponse<AiReviewConventionsResponse>(response);
+}
+
+// ========================================
+// 检查 Session 状态相关 API
+// ========================================
+
+/**
+ * GET /api/check/session/{sessionId}/status — 检查 session 是否仍然有效
+ *
+ * 用于前端从 IndexedDB 恢复历史报告后验证后端 session 是否还存在。
+ * 不使用重试，快速返回结果。若 session 存活还会自动续命。
+ */
+export async function checkCheckSessionStatus(
+  sessionId: string
+): Promise<CheckSessionStatus> {
+  const response = await fetchWithRetry(
+    `${API_BASE}/check/session/${encodeURIComponent(sessionId)}/status`,
+    undefined,
+    0, // 不重试，快速返回
+  );
+  return handleResponse<CheckSessionStatus>(response);
 }
 
 // ========================================

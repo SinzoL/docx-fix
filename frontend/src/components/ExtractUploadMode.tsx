@@ -38,7 +38,7 @@ export default function ExtractUploadMode({
               从模板文档提取规则
             </h3>
             <p className="text-sm text-slate-500 mt-0.5">
-              上传学校发布的 .docx 格式模板，自动提取格式要求生成检查规则
+              上传 .docx 格式模板文档，自动提取格式要求生成检查规则
             </p>
           </div>
         </div>

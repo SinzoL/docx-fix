@@ -351,6 +351,13 @@ export interface PolishSessionStatus {
   filename: string;
 }
 
+/** 检查 session 状态查询响应 */
+export interface CheckSessionStatus {
+  exists: boolean;
+  filename: string;
+  rule_id: string;
+}
+
 // ========================================
 // 润色结果缓存（IndexedDB）
 // ========================================

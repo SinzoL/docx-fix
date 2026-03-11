@@ -277,6 +277,8 @@ function App() {
               sessionId={check.sessionId}
               onRecheck={check.handleRecheck}
               readOnly={check.isReadOnly}
+              sessionExpired={check.sessionExpired}
+              restoring={check.restoring}
               customRulesYaml={check.customRulesYaml}
               onCustomRulesYamlChange={check.handleCustomRulesYamlChange}
             />
@@ -416,7 +418,7 @@ function App() {
             <div className="text-sm text-slate-500 leading-relaxed">
               <span className="font-semibold text-slate-600">隐私保护承诺</span>
               <span className="mx-1.5 text-slate-300">|</span>
-              您上传的论文文档和模板文件仅在处理期间临时使用，完成后立即从服务器删除；自定义规则仅存储在您的浏览器本地，不会上传至服务器。我们不会收集、存储或分享您的任何文件内容。
+              您上传的文档和模板文件仅在处理期间临时使用，完成后立即从服务器删除；自定义规则仅存储在您的浏览器本地，不会上传至服务器。我们不会收集、存储或分享您的任何文件内容。
             </div>
           </div>
 

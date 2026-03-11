@@ -20,7 +20,7 @@ import type {
   CheckItemResult,
   AiReviewResult,
 } from "../types";
-import { reviewConventions } from "../services/api";
+import { reviewConventions, checkCheckSessionStatus } from "../services/api";
 import RuleDetail from "./RuleDetail";
 import AiSummary from "./AiSummary";
 import AiChatPanel from "./AiChatPanel";
@@ -34,8 +34,12 @@ interface CheckReportProps {
   fixLoading: boolean;
   sessionId?: string;
   onRecheck?: (report: CheckReportType) => void;
-  /** #13: 只读模式（历史报告查看时启用，禁用修复和切换规则） */
+  /** #13: 只读模式（后端 session 过期时启用，禁用修复和切换规则） */
   readOnly?: boolean;
+  /** 后端 session 是否已过期（用于区分提示文案） */
+  sessionExpired?: boolean;
+  /** 正在验证 session 状态 */
+  restoring?: boolean;
   /** #2: 当前自定义规则 YAML */
   customRulesYaml?: string;
   /** #2: 自定义规则 YAML 变更回调 */
@@ -49,6 +53,8 @@ export default function CheckReportView({
   sessionId,
   onRecheck,
   readOnly = false,
+  sessionExpired = false,
+  restoring = false,
   onCustomRulesYamlChange,
 }: CheckReportProps) {
   const [selectedRuleId, setSelectedRuleId] = useState(report.rule_id);
@@ -102,6 +108,20 @@ export default function CheckReportView({
         if (mountedRef.current) setAiReviewLoading(false);
       });
   }, [report.text_convention_meta, sessionId]);
+
+  // 心跳续命：session 存活且非只读时，每 15 分钟自动 touch session
+  useEffect(() => {
+    if (!sessionId || readOnly || sessionExpired) return;
+
+    const HEARTBEAT_INTERVAL = 15 * 60 * 1000; // 15 分钟
+    const timer = setInterval(() => {
+      checkCheckSessionStatus(sessionId).catch(() => {
+        // 心跳失败不影响用户操作，静默处理
+      });
+    }, HEARTBEAT_INTERVAL);
+
+    return () => clearInterval(timer);
+  }, [sessionId, readOnly, sessionExpired]);
 
   // 分层分组：格式检查 vs 文本排版习惯
   const { formatItems, textConventionItems, formatGroups, tcGroups } = useMemo(() => {
@@ -176,8 +196,20 @@ export default function CheckReportView({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* #13: 只读模式提示 */}
-      {readOnly && (
+      {/* 状态提示横幅 */}
+      {restoring && (
+        <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-700 text-sm font-medium">
+          <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></span>
+          <span>正在验证会话状态，请稍候...</span>
+        </div>
+      )}
+      {!restoring && readOnly && sessionExpired && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm font-medium">
+          <SvgIcon name="alert-triangle" size={18} />
+          <span>服务器上的会话已过期，当前为只读模式。如需修复或切换检查标准，请重新上传文件。</span>
+        </div>
+      )}
+      {!restoring && readOnly && !sessionExpired && (
         <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm font-medium">
           <SvgIcon name="alert-triangle" size={18} />
           <span>正在查看历史报告（只读模式）。如需修复或切换检查标准，请重新上传文件。</span>
