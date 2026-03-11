@@ -329,3 +329,24 @@ export interface PolishApplyResponse {
   applied_count: number;
   download_url: string;
 }
+
+// ========================================
+// 润色结果缓存（IndexedDB）
+// ========================================
+
+/** 润色结果缓存记录 */
+export interface PolishHistoryRecord {
+  /** session_id 作为主键 */
+  id: string;
+  filename: string;
+  suggestions: PolishSuggestion[];
+  summary: PolishSummary | null;
+  /** 用户的接受/拒绝决策 (index → boolean) */
+  decisions: Record<number, boolean>;
+  /** 润色完成时间 */
+  created_at: number;
+  /** 缓存过期时间 */
+  expires_at: number;
+  /** 是否已应用（下载过） */
+  applied: boolean;
+}

@@ -398,9 +398,10 @@ async def check_file(
             "rule_id": rule_id,
         })
 
-        # 5. 执行检查
+        # 5. 执行检查（同步 CPU 密集型操作，放到线程池避免阻塞事件循环）
         try:
-            report = run_check(
+            report = await asyncio.to_thread(
+                run_check,
                 filepath=filepath,
                 rules_path=resolved.path,
                 session_id=session_id,
@@ -471,7 +472,8 @@ async def recheck_file(request: RecheckRequest):
 
         # 执行检查
         try:
-            report = run_check(
+            report = await asyncio.to_thread(
+                run_check,
                 filepath=filepath,
                 rules_path=resolved.path,
                 session_id=request.session_id,
@@ -538,9 +540,10 @@ async def fix_file(
         # 解析规则来源
         resolved = _resolve_rules(request.rule_id, request.custom_rules_yaml)
 
-        # 执行修复
+        # 执行修复（同步 CPU 密集型操作，放到线程池避免阻塞事件循环）
         try:
-            report = run_fix(
+            report = await asyncio.to_thread(
+                run_fix,
                 filepath=filepath,
                 rules_path=resolved.path,
                 session_id=request.session_id,
@@ -632,9 +635,10 @@ async def extract_rules(
         with open(filepath, "wb") as f:
             f.write(content)
 
-        # 3. 执行提取
+        # 3. 执行提取（同步操作，放到线程池）
         try:
-            result = run_extract(
+            result = await asyncio.to_thread(
+                run_extract,
                 filepath=filepath,
                 name=name or None,
                 description=None,

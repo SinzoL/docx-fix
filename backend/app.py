@@ -22,6 +22,7 @@ from config import TEMP_DIR, SESSION_EXPIRE_SECONDS, SESSION_CLEANUP_INTERVAL, C
 from api.routes import router  # noqa: E402
 from api.ai_routes import ai_router  # noqa: E402
 from api.polish_routes import polish_router  # noqa: E402
+from services.polisher_service import cleanup_expired_polish_sessions  # noqa: E402
 
 # 初始化日志
 setup_logging()
@@ -44,6 +45,10 @@ async def cleanup_expired_sessions():
                             cleaned += 1
                 if cleaned > 0:
                     logger.info(f"清理了 {cleaned} 个过期 session 目录")
+
+            # 同步清理内存中的润色 session
+            cleanup_expired_polish_sessions()
+
         except Exception as e:
             logger.error(f"清理过期 session 时出错: {e}")
         await asyncio.sleep(SESSION_CLEANUP_INTERVAL)

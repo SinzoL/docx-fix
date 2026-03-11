@@ -170,8 +170,16 @@ export default function CheckReportView({
         ? customRule.name
         : rules.find(r => r.id === ruleId)?.name || ruleId;
       MessagePlugin.success(`已切换为「${displayName}」并重新检查`);
-    } catch {
-      MessagePlugin.error("重新检查失败，请重试");
+    } catch (err: unknown) {
+      // 区分 session 过期和其他错误
+      const isSessionExpired =
+        (err instanceof Error && (err.message.includes("不存在") || err.message.includes("已过期"))) ||
+        (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 404);
+      if (isSessionExpired) {
+        MessagePlugin.warning("会话已过期，请重新上传文件后再检查");
+      } else {
+        MessagePlugin.error("重新检查失败，请重试");
+      }
       setSelectedRuleId(report.rule_id);
     } finally {
       setRecheckLoading(false);

@@ -44,19 +44,28 @@ async function fetchWithRetry(
   input: RequestInfo | URL,
   init?: RequestInit,
   maxRetries = 2,
-  baseDelay = 800
+  baseDelay = 800,
+  timeoutMs = 120_000, // 默认 120 秒超时
 ): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // 如果调用方没有传入 signal，自动创建超时 signal
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let fetchInit = init;
+    if (!init?.signal && timeoutMs > 0) {
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      fetchInit = { ...init, signal: controller.signal };
+    }
+
     try {
-      const response = await fetch(input, init);
+      const response = await fetch(input, fetchInit);
 
       // 5xx 服务端错误才重试，4xx 不重试
       if (response.status >= 500 && attempt < maxRetries) {
         lastError = new Error(`Server error ${response.status}`);
-        // 如果已被取消，不再重试
-        if (init?.signal?.aborted) throw init.signal.reason ?? new DOMException("Aborted", "AbortError");
+        if (fetchInit?.signal?.aborted) throw fetchInit.signal.reason ?? new DOMException("Aborted", "AbortError");
         await delay(baseDelay * Math.pow(2, attempt));
         continue;
       }
@@ -70,10 +79,12 @@ async function fetchWithRetry(
       // 网络层错误（连接断开、DNS 失败等）
       lastError = err;
       if (attempt < maxRetries) {
-        if (init?.signal?.aborted) throw init.signal.reason ?? new DOMException("Aborted", "AbortError");
+        if (fetchInit?.signal?.aborted) throw fetchInit.signal.reason ?? new DOMException("Aborted", "AbortError");
         await delay(baseDelay * Math.pow(2, attempt));
         continue;
       }
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     }
   }
 
@@ -221,7 +232,7 @@ export async function fixFile(
  */
 export async function downloadFixedFile(sessionId: string): Promise<Blob> {
   const response = await fetchWithRetry(
-    `${API_BASE}/fix/download?session_id=${sessionId}`
+    `${API_BASE}/fix/download?session_id=${encodeURIComponent(sessionId)}`
   );
 
   if (!response.ok) {
@@ -359,7 +370,7 @@ export async function applyPolish(
  */
 export async function downloadPolishedFile(sessionId: string): Promise<Blob> {
   const response = await fetchWithRetry(
-    `${API_BASE}/polish/download/${sessionId}`
+    `${API_BASE}/polish/download/${encodeURIComponent(sessionId)}`
   );
 
   if (!response.ok) {

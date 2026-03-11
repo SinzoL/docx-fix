@@ -355,7 +355,9 @@ export default function UploadPanel({
                       {selectedFile.name}
                     </p>
                     <p className="text-sm font-medium text-slate-500 mt-1">
-                      {(selectedFile.size / 1024).toFixed(1)} KB · 点击或拖拽替换文件
+                      {selectedFile.size >= 1024 * 1024
+                        ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
+                        : `${(selectedFile.size / 1024).toFixed(1)} KB`} · 点击或拖拽替换文件
                     </p>
                   </div>
                 </div>

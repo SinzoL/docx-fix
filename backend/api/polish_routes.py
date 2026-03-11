@@ -11,6 +11,8 @@ import os
 import re
 import uuid
 import logging
+import asyncio
+from pathlib import Path
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -22,11 +24,14 @@ from api.schemas import (
 )
 from services import llm_service
 from services import polisher_service
-from config import TEMP_DIR, MAX_FILE_SIZE
+from config import TEMP_DIR, MAX_FILE_SIZE, MAX_CONCURRENT_UPLOADS
 
 logger = logging.getLogger(__name__)
 
 polish_router = APIRouter(prefix="/polish", tags=["Polish"])
+
+# 并发限制信号量：润色涉及 LLM 调用，限制并发保护资源
+_polish_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
 
 # UUID v4 校验正则
 _UUID_RE = re.compile(
@@ -59,6 +64,32 @@ def _validate_session_id(session_id: str):
         )
 
 
+def _safe_session_dir(session_id: str) -> str:
+    """根据已校验的 session_id 构建安全的 session 目录路径（路径穿越防护）。"""
+    session_dir = Path(TEMP_DIR) / session_id
+    resolved = session_dir.resolve()
+    temp_resolved = Path(TEMP_DIR).resolve()
+    if not str(resolved).startswith(str(temp_resolved)):
+        logger.error(f"[polish] 路径穿越检测: session_id={session_id!r}, resolved={resolved}")
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="INVALID_SESSION_ID",
+                message="session_id 格式不正确"
+            ).model_dump(),
+        )
+    return str(session_dir)
+
+
+def _safe_filename(filename: str) -> str:
+    """清理文件名，移除路径分隔符等危险字符。"""
+    safe = Path(filename).name
+    safe = safe.replace("/", "_").replace("\\", "_").replace("..", "_")
+    if not safe:
+        safe = "document.docx"
+    return safe
+
+
 # ========================================
 # POST /api/polish — 执行润色（SSE 流式）
 # ========================================
@@ -83,37 +114,60 @@ async def polish_file(
             ).model_dump(),
         )
 
-    # 读取文件内容
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
+    # 流式读取文件并验证大小
+    content = bytearray()
+    chunk_size = 64 * 1024
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse(
+                    error="FILE_TOO_LARGE",
+                    message=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）"
+                ).model_dump(),
+            )
+    content = bytes(content)
+
+    # 魔数校验：docx 文件是 ZIP 格式，前 4 字节为 PK\x03\x04
+    if len(content) < 4 or content[:4] != b"PK\x03\x04":
         raise HTTPException(
             status_code=400,
             detail=ErrorResponse(
-                error="FILE_TOO_LARGE",
-                message=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）"
+                error="INVALID_FILE_CONTENT",
+                message="文件内容无效：不是有效的 .docx 文件（文件可能已损坏或被篡改）"
             ).model_dump(),
         )
 
-    # 保存到临时文件
+    # 保存到临时文件（安全路径）
     session_id = str(uuid.uuid4())
-    session_dir = os.path.join(TEMP_DIR, session_id)
+    session_dir = _safe_session_dir(session_id)
     os.makedirs(session_dir, exist_ok=True)
 
     # 安全文件名
-    safe_name = re.sub(r'[^\w\u4e00-\u9fff\.\-]', '_', file.filename)
+    safe_name = _safe_filename(file.filename)
     filepath = os.path.join(session_dir, safe_name)
     with open(filepath, "wb") as f:
         f.write(content)
 
     logger.info(f"[{session_id}] 开始润色：{safe_name}")
 
+    # 限制并发：SSE generator 包裹在信号量内
+    async def _rate_limited_generator():
+        async with _polish_semaphore:
+            async for chunk in polisher_service.polish_file(
+                file_path=filepath,
+                filename=file.filename,
+                session_id=session_id,
+                enable_reviewer=enable_reviewer,
+            ):
+                yield chunk
+
     return StreamingResponse(
-        polisher_service.polish_file(
-            file_path=filepath,
-            filename=file.filename,
-            session_id=session_id,
-            enable_reviewer=enable_reviewer,
-        ),
+        _rate_limited_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

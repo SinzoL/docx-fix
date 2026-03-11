@@ -8,13 +8,14 @@
  * - 润色完成后进入预览模式
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, MessagePlugin } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
 import type { PolishSuggestion, PolishSummary } from "../types";
 import PolishPreview from "./PolishPreview";
 import { applyPolish, downloadPolishedFile, triggerDownload } from "../services/api";
+import { savePolishResult, getLatestPolishResult, markPolishApplied } from "../services/cache";
 
 interface PolishPanelProps {
   onError?: (message: string) => void;
@@ -32,7 +33,40 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
   const [totalParagraphs, setTotalParagraphs] = useState(0);
   const [polishableParagraphs, setPolishableParagraphs] = useState(0);
 
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 组件挂载时尝试恢复 IndexedDB 中的润色缓存
+  useEffect(() => {
+    // 只在 IDLE 状态且没有建议时尝试恢复
+    if (state !== "IDLE" || suggestions.length > 0) return;
+
+    getLatestPolishResult().then((cached) => {
+      if (cached && cached.suggestions.length > 0) {
+        setSuggestions(cached.suggestions);
+        setSummary(cached.summary);
+        setSessionId(cached.id);
+        setState("POLISH_PREVIEW");
+        MessagePlugin.info("已恢复上次的润色结果");
+      }
+    }).catch(() => {
+      // IndexedDB 不可用，忽略
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 润色进行中，禁止用户意外关闭/刷新页面
+  useEffect(() => {
+    if (state !== "POLISHING") return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [state]);
 
   // 文件变化处理
   const handleFileChange = useCallback((files: Array<UploadFile>) => {
@@ -69,11 +103,17 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
     formData.append("file", selectedFile);
     formData.append("enable_reviewer", "true");
 
+    // 取消上一次未完成的请求
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      // 使用 fetch 发起 SSE 请求
+      // 使用 fetch 发起 SSE 请求（带 AbortSignal）
       const response = await fetch("/api/polish", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -105,15 +145,17 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
 
           const lines = eventStr.split("\n");
           let eventName = "";
-          let eventData = "";
+          const dataLines: string[] = [];
 
           for (const line of lines) {
             if (line.startsWith("event: ")) {
               eventName = line.slice(7);
             } else if (line.startsWith("data: ")) {
-              eventData = line.slice(6);
+              dataLines.push(line.slice(6));
             }
           }
+
+          const eventData = dataLines.join("\n");
 
           if (!eventName || !eventData) continue;
 
@@ -151,6 +193,18 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
                   setSuggestions(data.suggestions);
                 }
                 setState("POLISH_PREVIEW");
+
+                // 润色完成后缓存结果到 IndexedDB
+                if (data.session_id && data.suggestions) {
+                  savePolishResult(
+                    data.session_id,
+                    selectedFile?.name || "unknown.docx",
+                    data.suggestions,
+                    data.summary || null,
+                  ).catch((err: unknown) => {
+                    console.warn("缓存润色结果失败:", err);
+                  });
+                }
                 break;
 
               case "error":
@@ -163,6 +217,10 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         }
       }
     } catch (err: unknown) {
+      // 请求被取消时静默处理（用户主动取消）
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       const message = err instanceof Error ? err.message : "润色失败，请重试";
       onError?.(message);
       MessagePlugin.error(message);
@@ -183,6 +241,9 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
       triggerDownload(blob, result.filename.replace(/\.docx$/, "_polished.docx"));
       setState("DONE");
       MessagePlugin.success(`已应用 ${result.applied_count} 条修改并下载`);
+
+      // 标记缓存为已应用
+      markPolishApplied(sessionId).catch(() => {});
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "应用修改失败";
       MessagePlugin.error(message);
@@ -192,15 +253,22 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
 
   // 重新开始
   const handleReset = useCallback(() => {
+    // 取消进行中的 SSE 请求
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     setState("IDLE");
     setSelectedFile(null);
     setSuggestions([]);
     setSummary(null);
     setSessionId("");
     setProgress({ current: 0, total: 0 });
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+  }, []);
+
+  // 组件卸载时取消 SSE 请求，避免后端继续调用 LLM
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, []);
 
   // 渲染不同状态
@@ -212,6 +280,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         onApply={handleApplyAndDownload}
         onBack={handleReset}
         applying={state === "APPLYING"}
+        sessionId={sessionId}
       />
     );
   }
@@ -284,7 +353,9 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
                       {selectedFile.name}
                     </p>
                     <p className="text-sm font-medium text-slate-500 mt-1">
-                      {(selectedFile.size / 1024).toFixed(1)} KB · 点击或拖拽替换文件
+                      {selectedFile.size >= 1024 * 1024
+                        ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
+                        : `${(selectedFile.size / 1024).toFixed(1)} KB`} · 点击或拖拽替换文件
                     </p>
                   </div>
                 </div>

@@ -10,8 +10,9 @@
  * - 应用选中的修改并下载
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import type { PolishSuggestion, PolishSummary } from "../types";
+import { updatePolishDecisions } from "../services/cache";
 
 interface PolishPreviewProps {
   suggestions: PolishSuggestion[];
@@ -19,6 +20,10 @@ interface PolishPreviewProps {
   onApply: (acceptedIndices: number[]) => void;
   onBack: () => void;
   applying?: boolean;
+  /** 从缓存恢复的 session_id，用于持久化决策 */
+  sessionId?: string;
+  /** 从缓存恢复的初始决策 */
+  initialDecisions?: Record<number, boolean>;
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -39,14 +44,23 @@ export default function PolishPreview({
   onApply,
   onBack,
   applying = false,
+  sessionId,
+  initialDecisions,
 }: PolishPreviewProps) {
   // 每条建议的接受/拒绝状态：true = 接受, false = 拒绝
   const [decisions, setDecisions] = useState<Record<number, boolean>>(() => {
+    // 优先使用从缓存恢复的决策
+    if (initialDecisions && Object.keys(initialDecisions).length > 0) {
+      return initialDecisions;
+    }
     // 默认全部接受
     const initial: Record<number, boolean> = {};
     suggestions.forEach((_, i) => { initial[i] = true; });
     return initial;
   });
+
+  // 防抖定时器，避免频繁写入 IndexedDB
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 当前筛选类型
   const [filterType, setFilterType] = useState<string>("all");
@@ -64,24 +78,41 @@ export default function PolishPreview({
     return Object.values(decisions).filter(v => v === true).length;
   }, [decisions]);
 
+  // 将决策持久化到 IndexedDB（防抖 1 秒）
+  const persistDecisions = useCallback((newDecisions: Record<number, boolean>) => {
+    if (!sessionId) return;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      updatePolishDecisions(sessionId, newDecisions).catch(() => {});
+    }, 1000);
+  }, [sessionId]);
+
   // 接受/拒绝
   const handleDecision = useCallback((index: number, accept: boolean) => {
-    setDecisions(prev => ({ ...prev, [index]: accept }));
-  }, []);
+    setDecisions(prev => {
+      const next = { ...prev, [index]: accept };
+      persistDecisions(next);
+      return next;
+    });
+  }, [persistDecisions]);
 
   // 全部接受
   const handleAcceptAll = useCallback(() => {
     const newDecisions: Record<number, boolean> = {};
     suggestions.forEach((_, i) => { newDecisions[i] = true; });
     setDecisions(newDecisions);
-  }, [suggestions]);
+    persistDecisions(newDecisions);
+  }, [suggestions, persistDecisions]);
 
   // 全部拒绝
   const handleRejectAll = useCallback(() => {
     const newDecisions: Record<number, boolean> = {};
     suggestions.forEach((_, i) => { newDecisions[i] = false; });
     setDecisions(newDecisions);
-  }, [suggestions]);
+    persistDecisions(newDecisions);
+  }, [suggestions, persistDecisions]);
 
   // 应用修改
   const handleApply = useCallback(() => {

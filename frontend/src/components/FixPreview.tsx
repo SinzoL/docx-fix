@@ -36,6 +36,8 @@ export default function FixPreview({
   const [downloading, setDownloading] = useState(false);
   const [showFullReport, setShowFullReport] = useState(false);
 
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
   const handleDownload = useCallback(async () => {
     setDownloading(true);
     try {
@@ -43,7 +45,7 @@ export default function FixPreview({
       const base = report.filename.replace(/\.docx$/i, "");
       triggerDownload(blob, `${base}_fixed.docx`);
       MessagePlugin.success("下载成功！");
-      onDownloadComplete();
+      setDownloadSuccess(true);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "下载失败";
@@ -51,7 +53,7 @@ export default function FixPreview({
     } finally {
       setDownloading(false);
     }
-  }, [sessionId, report.filename, onDownloadComplete]);
+  }, [sessionId, report.filename]);
 
   // 按类别分组修复后检查项
   const groupedAfterItems = (report.after_items ?? []).reduce<Record<string, CheckItemResult[]>>((groups, item) => {
@@ -79,15 +81,24 @@ export default function FixPreview({
             </p>
           </div>
 
-          <button
-            disabled={downloading}
-            onClick={handleDownload}
-            className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2 ${
-              downloading
-                ? "bg-slate-400 cursor-not-allowed shadow-none"
-                : "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-emerald-500/30 hover:-translate-y-0.5 cursor-pointer"
-            }`}
-          >
+          <div className="flex items-center gap-3">
+            {downloadSuccess && (
+              <button
+                onClick={onDownloadComplete}
+                className="px-6 py-3 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 hover:shadow-lg transition-all cursor-pointer"
+              >
+                ✓ 完成
+              </button>
+            )}
+            <button
+              disabled={downloading}
+              onClick={handleDownload}
+              className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2 ${
+                downloading
+                  ? "bg-slate-400 cursor-not-allowed shadow-none"
+                  : "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-emerald-500/30 hover:-translate-y-0.5 cursor-pointer"
+              }`}
+            >
             {downloading ? (
               <span className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
@@ -99,6 +110,7 @@ export default function FixPreview({
               </>
             )}
           </button>
+          </div>
         </div>
 
         {/* 修复前后对比 */}

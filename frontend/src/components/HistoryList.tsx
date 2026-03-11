@@ -27,6 +27,7 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearDialogVisible, setClearDialogVisible] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // 加载历史记录
   const loadHistory = useCallback(async () => {
@@ -45,11 +46,12 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
     loadHistory();
   }, [loadHistory]);
 
-  // 删除单条记录
-  const handleDelete = useCallback(
+  // 删除单条记录（需确认）
+  const handleDeleteConfirm = useCallback(
     async (id: string) => {
       await deleteHistory(id);
       setRecords((prev) => prev.filter((r) => r.id !== id));
+      setDeleteConfirmId(null);
       MessagePlugin.success("已删除");
     },
     []
@@ -166,7 +168,7 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(record.id);
+                      setDeleteConfirmId(record.id);
                     }}
                     className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-all cursor-pointer"
                     title="删除记录"
@@ -193,6 +195,19 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
         onConfirm={handleClearAll}
         onClose={() => setClearDialogVisible(false)}
         onCancel={() => setClearDialogVisible(false)}
+      />
+
+      {/* 单条删除确认对话框 */}
+      <Dialog
+        visible={!!deleteConfirmId}
+        header="确认删除"
+        body="确定要删除这条历史记录吗？"
+        confirmBtn="删除"
+        cancelBtn="取消"
+        theme="danger"
+        onConfirm={() => deleteConfirmId && handleDeleteConfirm(deleteConfirmId)}
+        onClose={() => setDeleteConfirmId(null)}
+        onCancel={() => setDeleteConfirmId(null)}
       />
     </div>
   );

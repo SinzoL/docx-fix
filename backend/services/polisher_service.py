@@ -10,12 +10,14 @@ from __future__ import annotations
 import json
 import os
 import logging
+import time
+import threading
 import uuid
 from typing import AsyncGenerator
 
 from docx import Document
 
-from config import TEMP_DIR
+from config import TEMP_DIR, SESSION_EXPIRE_SECONDS
 from scripts.polisher.text_extractor import TextExtractor, ParagraphSnapshot
 from scripts.polisher.polish_engine import PolishEngine, PolishSuggestion
 from scripts.polisher.text_writer import TextWriter
@@ -23,8 +25,56 @@ from scripts.polisher.rule_scanner import RuleScanner
 
 logger = logging.getLogger(__name__)
 
-# 内存中的 session 数据（简单实现，生产环境应使用 Redis）
+# ========================================
+# 润色 session 内存存储（带过期 + 大小限制）
+# ========================================
 _sessions: dict[str, dict] = {}
+_sessions_lock = threading.Lock()
+
+# 单个 session 最大存活时间（秒），与文件 session 一致
+POLISH_SESSION_TTL = SESSION_EXPIRE_SECONDS  # 1 小时
+# 内存中最多保留的 session 数量（防 OOM）
+MAX_POLISH_SESSIONS = 50
+
+
+def _touch_polish_session(session_id: str) -> None:
+    """更新润色 session 的最后访问时间"""
+    session = _sessions.get(session_id)
+    if session:
+        session["_last_access"] = time.time()
+
+
+def cleanup_expired_polish_sessions() -> int:
+    """清理过期的润色 session 内存数据，返回清理数量。
+    由 app.py 的后台清理任务定期调用。"""
+    now = time.time()
+    expired_ids = []
+    with _sessions_lock:
+        for sid, session in _sessions.items():
+            last_access = session.get("_last_access", session.get("_created_at", 0))
+            if now - last_access > POLISH_SESSION_TTL:
+                expired_ids.append(sid)
+        for sid in expired_ids:
+            del _sessions[sid]
+    if expired_ids:
+        logger.info(f"清理了 {len(expired_ids)} 个过期润色 session（内存）")
+    return len(expired_ids)
+
+
+def _evict_if_needed() -> None:
+    """如果 session 数量超过上限，淘汰最旧的 session"""
+    with _sessions_lock:
+        if len(_sessions) <= MAX_POLISH_SESSIONS:
+            return
+        # 按最后访问时间排序，淘汰最旧的
+        sorted_sessions = sorted(
+            _sessions.items(),
+            key=lambda kv: kv[1].get("_last_access", 0),
+        )
+        evict_count = len(_sessions) - MAX_POLISH_SESSIONS
+        for sid, _ in sorted_sessions[:evict_count]:
+            del _sessions[sid]
+        logger.info(f"淘汰了 {evict_count} 个最旧的润色 session（内存上限 {MAX_POLISH_SESSIONS}）")
 
 
 def _session_dir(session_id: str) -> str:
@@ -59,13 +109,17 @@ async def polish_file(
         f"其中 {sum(1 for s in snapshots if s.is_polishable)} 段可润色"
     )
 
-    # 2. 保存 session 数据
+    # 2. 保存 session 数据（带时间戳）
+    _evict_if_needed()
+    now = time.time()
     _sessions[session_id] = {
         "file_path": file_path,
         "filename": filename,
         "snapshots": snapshots,
         "suggestions": [],
         "applied": False,
+        "_created_at": now,
+        "_last_access": now,
     }
 
     # 3. 规则扫描阶段（毫秒级，先于 LLM 润色）
@@ -145,8 +199,22 @@ async def apply_polish(
     if not session:
         raise ValueError(f"润色会话 '{session_id}' 不存在或已过期")
 
+    _touch_polish_session(session_id)
+
+    # 幂等保护：如果已应用，直接返回上次结果（而不是报错）
     if session.get("applied"):
-        raise ValueError(f"会话 '{session_id}' 的修改已被应用")
+        polished_path = session.get("polished_path")
+        if polished_path and os.path.exists(polished_path):
+            return {
+                "session_id": session_id,
+                "filename": session["filename"],
+                "applied_count": session.get("_applied_count", 0),
+                "download_url": f"/api/polish/download/{session_id}",
+            }
+        raise ValueError(f"会话 '{session_id}' 的修改已被应用但文件已失效")
+
+    # 立即标记为已应用（防止并发双击）
+    session["applied"] = True
 
     file_path = session["file_path"]
     filename = session["filename"]
@@ -167,27 +235,34 @@ async def apply_polish(
             accepted_suggestions.append(suggestion)
 
     if not accepted_suggestions:
+        # 回滚标记
+        session["applied"] = False
         raise ValueError("没有有效的润色建议被选中")
 
     # 打开文档并应用修改
-    doc = Document(file_path)
-    writer = TextWriter(doc)
-    applied_count = writer.apply_suggestions(accepted_suggestions, snapshots)
+    try:
+        doc = Document(file_path)
+        writer = TextWriter(doc)
+        applied_count = writer.apply_suggestions(accepted_suggestions, snapshots)
 
-    # 保存修改后的文件
-    session_dir = _session_dir(session_id)
-    os.makedirs(session_dir, exist_ok=True)
+        # 保存修改后的文件
+        session_dir = _session_dir(session_id)
+        os.makedirs(session_dir, exist_ok=True)
 
-    base, ext = os.path.splitext(filename)
-    polished_filename = f"{base}_polished{ext}"
-    output_path = os.path.join(session_dir, polished_filename)
+        base, ext = os.path.splitext(filename)
+        polished_filename = f"{base}_polished{ext}"
+        output_path = os.path.join(session_dir, polished_filename)
 
-    writer.save(output_path)
+        writer.save(output_path)
+    except Exception:
+        # 操作失败，回滚标记允许重试
+        session["applied"] = False
+        raise
 
-    # 标记为已应用
-    session["applied"] = True
+    # 持久化应用结果（用于幂等返回）
     session["polished_path"] = output_path
     session["polished_filename"] = polished_filename
+    session["_applied_count"] = applied_count
 
     logger.info(
         f"[{session_id}] 应用了 {applied_count}/{len(accepted_suggestions)} 条修改"
@@ -213,6 +288,8 @@ def get_polished_file(session_id: str) -> tuple[str, str]:
     session = _sessions.get(session_id)
     if not session:
         raise ValueError(f"润色会话 '{session_id}' 不存在或已过期")
+
+    _touch_polish_session(session_id)
 
     polished_path = session.get("polished_path")
     if not polished_path or not os.path.exists(polished_path):

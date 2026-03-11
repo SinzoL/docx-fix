@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from "react";
 import { MessagePlugin } from "tdesign-react";
 import type { AppState, CheckReport, FixReport } from "./types";
 import { fixFile } from "./services/api";
-import { cleanExpired, saveHistory, updateFixReport } from "./services/cache";
+import { cleanExpired, cleanExpiredPolish, saveHistory, updateFixReport } from "./services/cache";
 import { init as initRuleStorage, startCrossTabSync } from "./services/ruleStorage";
 import UploadPanel from "./components/UploadPanel";
 import ExtractPanel from "./components/ExtractPanel";
@@ -37,6 +37,12 @@ function App() {
     cleanExpired().then((count) => {
       if (count > 0) {
         console.log(`已清理 ${count} 条过期缓存`);
+      }
+    });
+    // 清理过期的润色缓存
+    cleanExpiredPolish().then((count) => {
+      if (count > 0) {
+        console.log(`已清理 ${count} 条过期润色缓存`);
       }
     });
     // 初始化 localStorage 规则存储（清理过期规则）
@@ -233,32 +239,30 @@ function App() {
               </div>
             </div>
 
-            {/* 根据 Tab 展示不同面板 */}
-            {activeTab === "check" && (
-              <>
-                <UploadPanel
-                  onCheckStart={handleCheckStart}
-                  onCheckComplete={handleCheckComplete}
-                  onError={handleCheckError}
-                  selectedRuleId={selectedRuleId}
-                  onRuleChange={handleRuleChange}
-                  customRulesYaml={customRulesYaml}
-                  onCustomRulesYamlChange={setCustomRulesYaml}
-                  onGoToExtract={() => setActiveTab("extract")}
-                />
-                <div className="mt-8">
-                  <HistoryList onViewReport={handleViewHistoryReport} />
-                </div>
-              </>
-            )}
+            {/* 根据 Tab 展示不同面板（使用 display 控制保活，避免切换时丢失状态） */}
+            <div style={{ display: activeTab === "check" ? "block" : "none" }}>
+              <UploadPanel
+                onCheckStart={handleCheckStart}
+                onCheckComplete={handleCheckComplete}
+                onError={handleCheckError}
+                selectedRuleId={selectedRuleId}
+                onRuleChange={handleRuleChange}
+                customRulesYaml={customRulesYaml}
+                onCustomRulesYamlChange={setCustomRulesYaml}
+                onGoToExtract={() => setActiveTab("extract")}
+              />
+              <div className="mt-8">
+                <HistoryList onViewReport={handleViewHistoryReport} />
+              </div>
+            </div>
 
-            {activeTab === "extract" && (
+            <div style={{ display: activeTab === "extract" ? "block" : "none" }}>
               <ExtractPanel />
-            )}
+            </div>
 
-            {activeTab === "polish" && (
+            <div style={{ display: activeTab === "polish" ? "block" : "none" }}>
               <PolishPanel />
-            )}
+            </div>
           </div>
         )}
 

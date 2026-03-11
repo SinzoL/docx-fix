@@ -15,6 +15,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from config import MAX_CONCURRENT_UPLOADS
+
 from api.schemas import (
     AiSummarizeRequest,
     AiChatRequest,
@@ -37,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 ai_router = APIRouter(prefix="/ai", tags=["AI"])
 
+# AI 接口并发限制信号量：保护 LLM API 调用额度
+_ai_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
+
 
 def _check_llm_available():
     """检查 LLM 服务是否可用"""
@@ -51,29 +56,30 @@ def _check_llm_available():
 
 
 async def _sse_generator(messages: list[dict]):
-    """通用的 SSE 流式生成器。
+    """通用的 SSE 流式生成器（带并发限制）。
 
     将 LLM 流式输出转换为 SSE 格式：
     data: {"token": "xxx"}
     ...
     data: {"token": "", "done": true}
     """
-    try:
-        async for token in llm_service.chat_completion_stream(messages):
-            payload = json.dumps({"token": token}, ensure_ascii=False)
-            yield f"data: {payload}\n\n"
+    async with _ai_semaphore:
+        try:
+            async for token in llm_service.chat_completion_stream(messages):
+                payload = json.dumps({"token": token}, ensure_ascii=False)
+                yield f"data: {payload}\n\n"
 
-        # 发送完成信号
-        done_payload = json.dumps({"token": "", "done": True}, ensure_ascii=False)
-        yield f"data: {done_payload}\n\n"
+            # 发送完成信号
+            done_payload = json.dumps({"token": "", "done": True}, ensure_ascii=False)
+            yield f"data: {done_payload}\n\n"
 
-    except Exception as e:
-        logger.error(f"SSE 流式生成失败: {e}")
-        error_payload = json.dumps(
-            {"error": True, "message": f"AI 服务出错: {str(e)}"},
-            ensure_ascii=False,
-        )
-        yield f"data: {error_payload}\n\n"
+        except Exception as e:
+            logger.error(f"SSE 流式生成失败: {e}")
+            error_payload = json.dumps(
+                {"error": True, "message": f"AI 服务出错: {str(e)}"},
+                ensure_ascii=False,
+            )
+            yield f"data: {error_payload}\n\n"
 
 
 # ========================================
@@ -162,11 +168,12 @@ async def generate_rules(request: AiGenerateRulesRequest):
     )
 
     try:
-        yaml_content = await llm_service.chat_completion(
-            messages=messages,
-            max_tokens=4096,  # 规则文件可能较长
-            temperature=0.2,  # 更低温度保证格式准确
-        )
+        async with _ai_semaphore:
+            yaml_content = await llm_service.chat_completion(
+                messages=messages,
+                max_tokens=4096,  # 规则文件可能较长
+                temperature=0.2,  # 更低温度保证格式准确
+            )
 
         # 清理 LLM 输出中可能的 markdown 代码块标记
         yaml_content = yaml_content.strip()
@@ -234,15 +241,16 @@ async def review_conventions(request: AiReviewConventionsRequest):
     )
 
     try:
-        # 15 秒超时保护
-        raw_response = await asyncio.wait_for(
-            llm_service.chat_completion(
-                messages=messages,
-                max_tokens=2048,
-                temperature=0.1,  # 低温度确保判断一致性
-            ),
-            timeout=15.0,
-        )
+        # 15 秒超时保护 + 并发限制
+        async with _ai_semaphore:
+            raw_response = await asyncio.wait_for(
+                llm_service.chat_completion(
+                    messages=messages,
+                    max_tokens=2048,
+                    temperature=0.1,  # 低温度确保判断一致性
+                ),
+                timeout=15.0,
+            )
 
         # 解析 LLM 响应
         reviews = _parse_review_response(raw_response, request.disputed_items)
