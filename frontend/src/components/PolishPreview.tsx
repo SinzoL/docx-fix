@@ -11,6 +11,7 @@
  */
 
 import { useState, useMemo, useCallback, useRef } from "react";
+import { SvgIcon } from "./icons/SvgIcon";
 import type { PolishSuggestion, PolishSummary } from "../types";
 import { updatePolishDecisions } from "../services/cache";
 
@@ -129,7 +130,9 @@ export default function PolishPreview({
         <div className="bg-gradient-to-br from-white/60 to-violet-50/40 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">📝</span>
+              <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-violet-100 text-violet-600">
+                <SvgIcon name="edit" size={20} />
+              </span>
               <div>
                 <h3 className="text-lg font-bold text-slate-800 font-display">内容润色预览</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -153,11 +156,11 @@ export default function PolishPreview({
               </span>
               {summary.by_source && (
                 <>
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-cyan-50 border border-cyan-200/60 text-cyan-600">
-                    🔧 规则检出 {summary.by_source.rule}
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-cyan-50 border border-cyan-200/60 text-cyan-600 inline-flex items-center gap-1">
+                    <SvgIcon name="wrench" size={12} /> 规则检出 {summary.by_source.rule}
                   </span>
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-violet-50 border border-violet-200/60 text-violet-600">
-                    🤖 AI 检出 {summary.by_source.llm}
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-violet-50 border border-violet-200/60 text-violet-600 inline-flex items-center gap-1">
+                    <SvgIcon name="bot" size={12} /> AI 检出 {summary.by_source.llm}
                   </span>
                 </>
               )}
@@ -170,8 +173,8 @@ export default function PolishPreview({
                 );
               })}
               {summary.semantic_warnings > 0 && (
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-50 border border-orange-200/60 text-orange-600">
-                  ⚠️ 语义警告 {summary.semantic_warnings}
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-50 border border-orange-200/60 text-orange-600 inline-flex items-center gap-1">
+                  <SvgIcon name="alert-triangle" size={12} /> 语义警告 {summary.semantic_warnings}
                 </span>
               )}
             </div>
@@ -211,15 +214,15 @@ export default function PolishPreview({
           <div className="flex gap-2">
             <button
               onClick={handleAcceptAll}
-              className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200/60 hover:bg-emerald-100 transition-all cursor-pointer"
+              className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200/60 hover:bg-emerald-100 transition-all cursor-pointer inline-flex items-center gap-1"
             >
-              ✅ 全部接受
+              <SvgIcon name="check-circle" size={12} /> 全部接受
             </button>
             <button
               onClick={handleRejectAll}
-              className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-500 border border-red-200/60 hover:bg-red-100 transition-all cursor-pointer"
+              className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-500 border border-red-200/60 hover:bg-red-100 transition-all cursor-pointer inline-flex items-center gap-1"
             >
-              ❌ 全部拒绝
+              <SvgIcon name="x-circle" size={12} /> 全部拒绝
             </button>
           </div>
         </div>
@@ -248,38 +251,38 @@ export default function PolishPreview({
                 {/* 标题行 */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${typeInfo.bg} ${typeInfo.color}`}>
-                      {suggestion.source === "rule" ? "🔧 " : "🤖 "}{typeInfo.label}
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-0.5 ${typeInfo.bg} ${typeInfo.color}`}>
+                      {suggestion.source === "rule" ? <SvgIcon name="wrench" size={10} /> : <SvgIcon name="bot" size={10} />}{typeInfo.label}
                     </span>
                     <span className="text-xs text-slate-400">
                       第 {suggestion.paragraph_index + 1} 段
                     </span>
                     {suggestion.semantic_warning && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-50 border border-orange-200/60 text-orange-600" title={suggestion.semantic_warning_text || ""}>
-                        ⚠️ 语义可能有变化
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-50 border border-orange-200/60 text-orange-600 inline-flex items-center gap-0.5" title={suggestion.semantic_warning_text || ""}>
+                        <SvgIcon name="alert-triangle" size={10} /> 语义可能有变化
                       </span>
                     )}
                   </div>
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => handleDecision(index, true)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-0.5 ${
                         isAccepted
                           ? "bg-emerald-500 text-white shadow-sm"
                           : "bg-white text-emerald-500 border border-emerald-200 hover:bg-emerald-50"
                       }`}
                     >
-                      ✅ 接受
+                      <SvgIcon name="check" size={12} /> 接受
                     </button>
                     <button
                       onClick={() => handleDecision(index, false)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-0.5 ${
                         !isAccepted
                           ? "bg-red-500 text-white shadow-sm"
                           : "bg-white text-red-400 border border-red-200 hover:bg-red-50"
                       }`}
                     >
-                      ❌ 拒绝
+                      <SvgIcon name="x" size={12} /> 拒绝
                     </button>
                   </div>
                 </div>
@@ -299,7 +302,7 @@ export default function PolishPreview({
                 {/* 修改说明 */}
                 {suggestion.explanation && (
                   <div className="mt-2 flex items-start gap-1.5 text-xs text-slate-500">
-                    <span className="flex-shrink-0">💡</span>
+                    <SvgIcon name="lightbulb" size={13} className="flex-shrink-0 mt-0.5" />
                     <span>{suggestion.explanation}</span>
                   </div>
                 )}
@@ -307,7 +310,7 @@ export default function PolishPreview({
                 {/* 语义警告详情 */}
                 {suggestion.semantic_warning && suggestion.semantic_warning_text && (
                   <div className="mt-2 flex items-start gap-1.5 text-xs text-orange-600 bg-orange-50 rounded-lg p-2">
-                    <span className="flex-shrink-0">⚠️</span>
+                    <SvgIcon name="alert-triangle" size={13} className="flex-shrink-0 mt-0.5" />
                     <span>{suggestion.semantic_warning_text}</span>
                   </div>
                 )}

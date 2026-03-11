@@ -12,6 +12,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, MessagePlugin } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { CheckCircleIcon } from "tdesign-icons-react";
+import { SvgIcon } from "./icons/SvgIcon";
 import type { PolishSuggestion, PolishSummary } from "../types";
 import PolishPreview from "./PolishPreview";
 import { applyPolish, downloadPolishedFile, triggerDownload } from "../services/api";
@@ -312,7 +313,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
         <div className="bg-gradient-to-br from-white/60 to-violet-50/40 p-4 sm:p-6 border-b border-slate-200/50">
           <div className="flex items-start gap-3 text-sm text-slate-600">
             <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex-shrink-0">
-              ✨
+              <SvgIcon name="sparkles" size={18} />
             </span>
             <div>
               <p className="font-semibold text-slate-700 mb-1">内容润色模式</p>
@@ -411,7 +412,7 @@ export default function PolishPanel({ onError }: PolishPanelProps) {
                 {suggestions.slice(-3).map((s, i) => (
                   <div key={i} className="text-xs bg-white/60 rounded-lg p-2 border border-slate-200/50">
                     <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-600 mr-1">
-                      {s.source === 'rule' ? '🔧 ' : '🤖 '}
+                      {s.source === 'rule' ? <SvgIcon name="wrench" size={10} className="inline-block mr-0.5" /> : <SvgIcon name="bot" size={10} className="inline-block mr-0.5" />}
                       {s.change_type === 'grammar' ? '语病' : s.change_type === 'wording' ? '用词' : s.change_type === 'punctuation' ? '标点' : s.change_type === 'structure' ? '句式' : s.change_type === 'typo' ? '错别字' : s.change_type === 'rule_punctuation' ? '标点' : s.change_type === 'rule_space' ? '空格' : s.change_type === 'rule_fullwidth' ? '全半角' : '学术'}
                     </span>
                     <span className="text-slate-600 line-through">{s.original_text.slice(0, 30)}...</span>
