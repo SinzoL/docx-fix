@@ -8,10 +8,17 @@
 - 标题样式修复规则
 """
 
+from __future__ import annotations
+
 import re
 from collections import OrderedDict
+from typing import TYPE_CHECKING, Any
 
 from .constants import NSMAP, W
+
+if TYPE_CHECKING:
+    from docx.document import Document
+    from docx.styles.style import BaseStyle
 
 
 class StructureExtractorMixin:
@@ -20,6 +27,11 @@ class StructureExtractorMixin:
     依赖宿主类提供：self.doc, self.rules
     依赖 StyleExtractorMixin 提供：self._is_instruction_style()
     """
+
+    doc: Document
+    rules: OrderedDict[str, Any]
+
+    def _is_instruction_style(self, _style: BaseStyle) -> bool: ...
 
     # ========================================
     # 文档结构提取
@@ -326,13 +338,14 @@ class StructureExtractorMixin:
                 instruction_style_name = style.name
                 break
 
-        checks['template_instructions_check'] = OrderedDict([
+        tpl_check: OrderedDict[str, Any] = OrderedDict([
             ('enabled', has_instruction_style),
             ('description', '检查是否存在未删除的模板说明文字'),
         ])
         if has_instruction_style:
-            checks['template_instructions_check']['style_name'] = instruction_style_name
-            checks['template_instructions_check']['color'] = 'FF0000'
+            tpl_check['style_name'] = instruction_style_name
+            tpl_check['color'] = 'FF0000'
+        checks['template_instructions_check'] = tpl_check
 
         # 正文字体一致性
         checks['body_font_consistency'] = self._build_font_consistency_check(
@@ -347,14 +360,15 @@ class StructureExtractorMixin:
         styles_section = self.rules.get('styles', {})
         fig_style = '图题' if '图题' in styles_section else None
         tbl_style = '表题注' if '表题注' in styles_section else None
-        checks['figure_table_caption'] = OrderedDict([
+        caption_check: OrderedDict[str, Any] = OrderedDict([
             ('enabled', bool(fig_style or tbl_style)),
             ('description', '检查图片是否有对应的图题'),
         ])
         if fig_style:
-            checks['figure_table_caption']['figure_caption_style'] = fig_style
+            caption_check['figure_caption_style'] = fig_style
         if tbl_style:
-            checks['figure_table_caption']['table_caption_style'] = tbl_style
+            caption_check['table_caption_style'] = tbl_style
+        checks['figure_table_caption'] = caption_check
 
         self.rules['special_checks'] = checks
 
@@ -374,7 +388,7 @@ class StructureExtractorMixin:
                 if not en_font:
                     en_font = char.get('font_ascii')
 
-        check = OrderedDict([
+        check: OrderedDict[str, Any] = OrderedDict([
             ('enabled', bool(body_styles and (cn_font or en_font))),
             ('description', f'检查{check_key}中文使用{cn_font or "未指定"}、英文使用{en_font or "未指定"}'),
         ])
@@ -404,7 +418,7 @@ class StructureExtractorMixin:
                 if not en_font:
                     en_font = char.get('font_ascii')
 
-        check = OrderedDict([
+        check: OrderedDict[str, Any] = OrderedDict([
             ('enabled', bool(heading_styles and (cn_font or en_font))),
             ('description', f'检查标题中文使用{cn_font or "未指定"}、英文使用{en_font or "未指定"}'),
         ])
