@@ -93,6 +93,7 @@ export default function FixPreview({
             <button
               disabled={downloading}
               onClick={handleDownload}
+              aria-label="下载修复后的文档"
               className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2 ${
                 downloading
                   ? "bg-slate-400 cursor-not-allowed shadow-none"

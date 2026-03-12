@@ -16,7 +16,7 @@ interface FileDropzoneProps {
 
 export default function FileDropzone({ selectedFile, onFileChange }: FileDropzoneProps) {
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6" aria-label="上传Word文档区域，支持拖拽或点击上传">
       <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
         <span className="flex items-center justify-center w-5 h-5 rounded-md bg-blue-600 text-white text-xs font-bold">2</span>
         上传目标文档

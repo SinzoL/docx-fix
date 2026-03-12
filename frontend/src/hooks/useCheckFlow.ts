@@ -88,6 +88,7 @@ export function useCheckFlow(
       setIsReadOnly(false);
       setSessionExpired(false);
       setAppState("REPORT_READY");
+      MessagePlugin.success("检查完成，报告已生成");
 
       // 缓存检查记录到 IndexedDB（含自定义规则 YAML + 规则选择身份）
       saveHistory(
@@ -121,6 +122,7 @@ export function useCheckFlow(
         const report = await fixFile(sessionId, selectedRuleId, customRulesYaml, includeTextFix);
         setFixReport(report);
         setAppState("FIX_PREVIEW");
+        MessagePlugin.success("修复完成，请查看修复结果");
 
         // 缓存修复报告到 IndexedDB
         updateFixReport(sessionId, report).catch((err) => {

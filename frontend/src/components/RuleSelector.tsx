@@ -5,6 +5,7 @@
  * 支持加载失败重试和引导创建自定义规则。
  */
 
+import { useMemo } from "react";
 import { Select } from "tdesign-react";
 import type { RuleInfo, CustomRule } from "../types";
 import { SvgIcon } from "./icons/SvgIcon";
@@ -30,6 +31,12 @@ export default function RuleSelector({
   onRetry,
   onGoToExtract,
 }: RuleSelectorProps) {
+  // Find the default rule for the recommendation hint
+  const defaultRule = useMemo(
+    () => rules.find((r) => r.is_default),
+    [rules],
+  );
+
   return (
     <div className="bg-gradient-to-br from-white/60 to-slate-50/40 p-4 sm:p-6 border-b border-slate-200/50">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -38,12 +45,12 @@ export default function RuleSelector({
             <span className="flex items-center justify-center w-5 h-5 rounded-md bg-blue-600 text-white text-xs font-bold">1</span>
             选择检查标准
           </label>
-          <div className="relative max-w-full sm:max-w-lg rule-select-wrapper">
+          <div className="relative max-w-full sm:max-w-lg rule-select-wrapper" aria-label="选择文档格式检查规则">
             <Select
               value={selectedRuleId}
               onChange={(val) => onRuleChange(val as string)}
               loading={rulesLoading}
-              placeholder="请选择一个检查规则模板..."
+              placeholder="请选择格式检查标准（如：学术论文、公文...）"
               size="large"
               popupProps={{
                 overlayClassName: "rule-select-popup",
@@ -134,6 +141,13 @@ export default function RuleSelector({
               )}
             </Select>
           </div>
+          {/* 默认规则推荐提示 */}
+          {!rulesError && !rulesLoading && defaultRule && selectedRuleId === defaultRule.id && (
+            <p className="text-xs text-blue-500 mt-2 flex items-center gap-1">
+              <SvgIcon name="lightbulb" size={12} />
+              推荐使用默认的「{defaultRule.name}」标准开始检查
+            </p>
+          )}
           {/* 规则加载失败提示 + 重试 */}
           {rulesError && (
             <div className="mt-2.5 flex items-center gap-2 text-xs">

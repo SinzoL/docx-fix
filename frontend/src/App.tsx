@@ -17,7 +17,7 @@
  * - 返回/中断确认
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { DialogPlugin } from "tdesign-react";
 import type { AppState } from "./types";
 import { cleanExpired, cleanExpiredPolish, cleanExpiredExtract } from "./services/cache";
@@ -61,6 +61,7 @@ const stateToTab: Record<AppState, "check" | "extract" | "polish"> = {
 function App() {
   const [appState, setAppState] = useState<AppState>("IDLE");
   const [activeTab, setActiveTab] = useState<"check" | "extract" | "polish">("check");
+  const [footerPrivacyExpanded, setFooterPrivacyExpanded] = useState(false);
 
   // 检查/修复流程 — 委托自定义 Hook 管理
   const check = useCheckFlow(setAppState);
@@ -181,30 +182,30 @@ function App() {
               <div className="inline-flex bg-white/60 backdrop-blur-sm rounded-xl p-1 border border-slate-200/60 shadow-sm">
                 <button
                   onClick={() => setActiveTab("check")}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                  className={`px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
                     activeTab === "check"
-                      ? "bg-white text-blue-600 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25 font-bold"
+                      : "text-slate-500 hover:text-slate-700 font-semibold"
                   }`}
                 >
                   <SvgIcon name="search" size={16} /> 上传检查
                 </button>
                 <button
                   onClick={() => setActiveTab("extract")}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                  className={`px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
                     activeTab === "extract"
-                      ? "bg-white text-purple-600 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-white text-purple-600 shadow-sm font-bold border-b-2 border-purple-600"
+                      : "text-slate-500 hover:text-slate-700 font-semibold"
                   }`}
                 >
                   <SvgIcon name="scan-extract" size={16} /> 提取规则
                 </button>
                 <button
                   onClick={() => setActiveTab("polish")}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                  className={`px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
                     activeTab === "polish"
-                      ? "bg-white text-violet-600 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-white text-violet-600 shadow-sm font-bold border-b-2 border-violet-600"
+                      : "text-slate-500 hover:text-slate-700 font-semibold"
                   }`}
                 >
                   <SvgIcon name="sparkles" size={16} /> 内容润色
@@ -262,8 +263,8 @@ function App() {
           <FullscreenLoading
             color="blue"
             icon="search"
-            title="正在深度分析文档..."
-            subtitle="这可能需要几秒钟，AI 正在比对各项规则"
+            title="AI 正在深度检查中..."
+            subtitle="正在逐项比对格式规则，预计需要 10~30 秒"
           />
         )}
 
@@ -294,8 +295,8 @@ function App() {
           <FullscreenLoading
             color="emerald"
             icon="sparkles"
-            title="正在魔法修复格式..."
-            subtitle="即将完成，让您的文档焕然一新"
+            title="正在智能修复格式..."
+            subtitle="AI 正在逐项修复文档格式问题，预计需要 10~30 秒"
           />
         )}
 
@@ -415,7 +416,7 @@ function App() {
       {/* 页脚 */}
       <footer className="relative z-10 border-t border-slate-200/50 mt-8">
         <div className="max-w-5xl mx-auto px-6 py-8">
-          {/* 隐私安全声明 */}
+          {/* 隐私安全声明（可折叠） */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6 p-4 bg-white/60 backdrop-blur-sm rounded-xl border border-slate-200/50">
             <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
               <SvgIcon name="shield-check" size={18} className="text-emerald-500" />
@@ -423,7 +424,15 @@ function App() {
             <div className="text-sm text-slate-500 leading-relaxed">
               <span className="font-semibold text-slate-600">隐私保护承诺</span>
               <span className="mx-1.5 text-slate-300">|</span>
-              上传的文档、模板文件及自定义规则内容会在服务器随会话临时保留，空闲约一小时后自动清除；检查记录、提取结果和润色结果仅缓存在浏览器本地（IndexedDB）。如使用 AI 总结、问答、规则生成、争议审查或内容润色，相关内容会发送到服务器并转交 AI 服务处理。
+              <span>您的文档数据受到安全保护。</span>
+              {footerPrivacyExpanded ? (
+                <Fragment>
+                  <span> 上传的文档、模板文件及自定义规则内容会在服务器随会话临时保留，空闲约一小时后自动清除；检查记录、提取结果和润色结果仅缓存在浏览器本地（IndexedDB）。如使用 AI 总结、问答、规则生成、争议审查或内容润色，相关内容会发送到服务器并转交 AI 服务处理。</span>
+                  <button onClick={() => setFooterPrivacyExpanded(false)} className="text-blue-500 hover:text-blue-600 ml-1 cursor-pointer hover:underline">收起</button>
+                </Fragment>
+              ) : (
+                <button onClick={() => setFooterPrivacyExpanded(true)} className="text-blue-500 hover:text-blue-600 ml-1 cursor-pointer hover:underline">查看详情</button>
+              )}
             </div>
           </div>
 

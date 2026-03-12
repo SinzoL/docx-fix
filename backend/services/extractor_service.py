@@ -8,13 +8,11 @@
 from __future__ import annotations
 
 import io
-from collections import OrderedDict
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from typing import Optional
 
-import yaml
-from engine.rule_extractor import RuleExtractor, OrderedDumper
+from engine.rule_extractor import RuleExtractor, rules_to_yaml
 
 
 def run_extract(
@@ -43,7 +41,7 @@ def run_extract(
         rules = extractor.extract_all(name=name, description=description)
 
     # 生成格式化的 YAML 字符串
-    yaml_content = _rules_to_yaml(rules, OrderedDumper)
+    yaml_content = rules_to_yaml(rules)
 
     # 生成摘要信息
     summary = _build_summary(rules)
@@ -60,52 +58,6 @@ def run_extract(
         "summary": summary,
         "review_context": review_context,
     }
-
-
-def _rules_to_yaml(rules: dict, ordered_dumper) -> str:
-    """将规则字典转为分节注释的 YAML 字符串。
-
-    与 rule_extractor.py 中的 save_yaml 方法逻辑一致，
-    但直接返回字符串而非写入文件。
-    """
-    sections = [
-        ('meta', '元信息'),
-        ('page_setup', '一、页面设置'),
-        ('header_footer', '二、页眉页脚'),
-        ('styles', '三、样式定义规则\n# 每个样式包含：段落格式 + 字符格式'),
-        ('structure', '四、文档结构规则'),
-        ('numbering', '五、编号定义规则'),
-        ('special_checks', '六、特殊检查规则'),
-        ('heading_style_fix', '七、标题样式自动修复规则'),
-    ]
-
-    lines = []
-    lines.append(f'# {"=" * 60}')
-    lines.append(f'# {rules.get("meta", {}).get("name", "格式规则")}')
-    lines.append(f'# {rules.get("meta", {}).get("description", "")}')
-    lines.append(f'# {"=" * 60}')
-    lines.append('')
-
-    for key, comment in sections:
-        if key not in rules:
-            continue
-
-        lines.append(f'# {"=" * 28}')
-        lines.append(f'# {comment}')
-        lines.append(f'# {"=" * 28}')
-
-        section_data = OrderedDict([(key, rules[key])])
-        yaml_str = yaml.dump(
-            dict(section_data),
-            Dumper=ordered_dumper,
-            default_flow_style=False,
-            allow_unicode=True,
-            width=120,
-            sort_keys=False,
-        )
-        lines.append(yaml_str)
-
-    return '\n'.join(lines)
 
 
 def _build_summary(rules: dict) -> dict:

@@ -18,6 +18,59 @@ from .style_extractor import StyleExtractorMixin
 from .structure_extractor import StructureExtractorMixin
 
 
+# ===== 分节注释的 YAML 序列化常量 =====
+_YAML_SECTIONS = [
+    ('meta', '元信息'),
+    ('page_setup', '一、页面设置'),
+    ('header_footer', '二、页眉页脚'),
+    ('styles', '三、样式定义规则\n# 每个样式包含：段落格式 + 字符格式'),
+    ('structure', '四、文档结构规则'),
+    ('numbering', '五、编号定义规则'),
+    ('special_checks', '六、特殊检查规则'),
+    ('heading_style_fix', '七、标题样式自动修复规则'),
+]
+
+
+def rules_to_yaml(rules: dict) -> str:
+    """将规则字典转为分节注释的 YAML 字符串。
+
+    这是公共工具函数，可在 CLI（save_yaml）和 Web API（extractor_service）中复用。
+
+    Args:
+        rules: 提取的规则字典（与 YAML 规则文件结构一致）。
+
+    Returns:
+        格式化的 YAML 字符串（含分节注释头）。
+    """
+    lines = []
+    lines.append(f'# {"=" * 60}')
+    lines.append(f'# {rules.get("meta", {}).get("name", "格式规则")}')
+    lines.append(f'# {rules.get("meta", {}).get("description", "")}')
+    lines.append(f'# {"=" * 60}')
+    lines.append('')
+
+    for key, comment in _YAML_SECTIONS:
+        if key not in rules:
+            continue
+
+        lines.append(f'# {"=" * 28}')
+        lines.append(f'# {comment}')
+        lines.append(f'# {"=" * 28}')
+
+        section_data = OrderedDict([(key, rules[key])])
+        yaml_str = yaml.dump(
+            dict(section_data),
+            Dumper=OrderedDumper,
+            default_flow_style=False,
+            allow_unicode=True,
+            width=120,
+            sort_keys=False,
+        )
+        lines.append(yaml_str)
+
+    return '\n'.join(lines)
+
+
 class RuleExtractor(StyleExtractorMixin, StructureExtractorMixin):
     """从 Word 模板文档提取格式规则"""
 
@@ -217,44 +270,7 @@ class RuleExtractor(StyleExtractorMixin, StructureExtractorMixin):
 
     def save_yaml(self, output_path):
         """将提取的规则保存为 YAML 文件"""
-        sections = [
-            ('meta', '元信息'),
-            ('page_setup', '一、页面设置'),
-            ('header_footer', '二、页眉页脚'),
-            ('styles', '三、样式定义规则\n# 每个样式包含：段落格式 + 字符格式'),
-            ('structure', '四、文档结构规则'),
-            ('numbering', '五、编号定义规则'),
-            ('special_checks', '六、特殊检查规则'),
-            ('heading_style_fix', '七、标题样式自动修复规则'),
-        ]
-
-        lines = []
-        lines.append(f'# {"=" * 60}')
-        lines.append(f'# {self.rules.get("meta", {}).get("name", "格式规则")}')
-        lines.append(f'# {self.rules.get("meta", {}).get("description", "")}')
-        lines.append(f'# {"=" * 60}')
-        lines.append('')
-
-        for key, comment in sections:
-            if key not in self.rules:
-                continue
-
-            lines.append(f'# {"=" * 28}')
-            lines.append(f'# {comment}')
-            lines.append(f'# {"=" * 28}')
-
-            section_data = OrderedDict([(key, self.rules[key])])
-            yaml_str = yaml.dump(
-                dict(section_data),
-                Dumper=OrderedDumper,
-                default_flow_style=False,
-                allow_unicode=True,
-                width=120,
-                sort_keys=False,
-            )
-            lines.append(yaml_str)
-
-        content = '\n'.join(lines)
+        content = rules_to_yaml(self.rules)
 
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(content)

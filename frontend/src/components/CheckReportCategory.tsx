@@ -2,11 +2,15 @@
  * 检查报告分类分组组件
  *
  * 渲染一个可折叠的分类卡片，包含分类标题、统计徽章和检查项列表。
+ * 当同一状态的项目超过 3 个时，自动折叠多余项并提供"展开更多"按钮。
  */
 
+import { useMemo, useState } from "react";
 import type { CheckItemResult, AiReviewResult } from "../types";
 import { SvgIcon } from "./icons/SvgIcon";
 import CheckReportItem from "./CheckReportItem";
+
+const COLLAPSE_THRESHOLD = 3;
 
 interface CheckReportCategoryProps {
   category: string;
@@ -33,6 +37,38 @@ export default function CheckReportCategory({
   const categoryFails = items.filter((i) => i.status === "FAIL").length;
   const categoryWarns = items.filter((i) => i.status === "WARN").length;
   const categoryPasses = items.filter((i) => i.status === "PASS").length;
+
+  // 是否需要折叠：同状态项超过阈值
+  const needsCollapse = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of items) {
+      counts[item.status] = (counts[item.status] || 0) + 1;
+    }
+    return Object.values(counts).some((c) => c > COLLAPSE_THRESHOLD);
+  }, [items]);
+
+  const [expanded, setExpanded] = useState(false);
+
+  // 计算可见项：前 3 项 + 每种状态的前 3 项
+  const { visibleItems, hiddenCount } = useMemo(() => {
+    if (!needsCollapse || expanded) {
+      return { visibleItems: items, hiddenCount: 0 };
+    }
+    // 按状态分组并只保留前 COLLAPSE_THRESHOLD 项
+    const statusSeen: Record<string, number> = {};
+    const visible: CheckItemResult[] = [];
+    let hidden = 0;
+    for (const item of items) {
+      const count = statusSeen[item.status] || 0;
+      if (count < COLLAPSE_THRESHOLD) {
+        visible.push(item);
+        statusSeen[item.status] = count + 1;
+      } else {
+        hidden++;
+      }
+    }
+    return { visibleItems: visible, hiddenCount: hidden };
+  }, [items, needsCollapse, expanded]);
 
   return (
     <div className="glass-card rounded-xl overflow-hidden border border-white/60 transition-all hover:border-blue-200">
@@ -73,7 +109,7 @@ export default function CheckReportCategory({
 
       {!collapsed && (
         <div className="divide-y divide-slate-100/50">
-          {items.map((item, index) => (
+          {visibleItems.map((item, index) => (
             <CheckReportItem
               key={`${item.item}-${index}`}
               item={item}
@@ -84,6 +120,26 @@ export default function CheckReportCategory({
               onToggleAiReason={onToggleAiReason}
             />
           ))}
+          {hiddenCount > 0 && !expanded && (
+            <div className="px-6 py-3 text-center">
+              <button
+                onClick={() => setExpanded(true)}
+                className="text-sm font-semibold text-blue-500 hover:text-blue-600 cursor-pointer hover:underline transition-colors"
+              >
+                展开更多（{hiddenCount} 项）
+              </button>
+            </div>
+          )}
+          {expanded && needsCollapse && (
+            <div className="px-6 py-3 text-center">
+              <button
+                onClick={() => setExpanded(false)}
+                className="text-sm font-semibold text-blue-500 hover:text-blue-600 cursor-pointer hover:underline transition-colors"
+              >
+                收起
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -200,6 +200,21 @@ export default function CheckReportView({
     return null;
   }, [aiReviews]);
 
+  // Sticky fix button: track whether summary card is visible
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [showStickyFix, setShowStickyFix] = useState(false);
+
+  useEffect(() => {
+    const el = summaryRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowStickyFix(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 状态提示横幅 */}
@@ -226,6 +241,7 @@ export default function CheckReportView({
       <AiSummary report={report} />
 
       {/* 汇总卡片（含规则切换、统计、操作按钮） */}
+      <div ref={summaryRef}>
       <CheckReportSummary
         report={report}
         onFix={onFix}
@@ -249,6 +265,40 @@ export default function CheckReportView({
         restorableCustomRuleId={restorableCustomRuleId}
         restorableCustomRulesYaml={restorableCustomRulesYaml}
       />
+      </div>
+
+      {/* Sticky 修复按钮：原始按钮滚出视口时显示 */}
+      {showStickyFix && hasFixable && !readOnly && !allPass && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] animate-in slide-in-from-bottom-4 duration-300">
+          <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3 text-sm text-slate-600">
+              <span className="font-semibold">{report.filename}</span>
+              <span className="text-slate-300">|</span>
+              <span className="text-rose-500 font-bold">{report.summary.fail} 项失败</span>
+              <span className="text-blue-500 font-bold">{report.summary.fixable} 项可修复</span>
+            </div>
+            <button
+              disabled={fixLoading}
+              onClick={() => onFix()}
+              aria-label="一键智能修复所有可修复项"
+              className={`px-6 py-2 text-sm font-bold rounded-xl flex items-center gap-2 transition-all shadow-md ${
+                fixLoading
+                  ? "bg-blue-400 text-white cursor-wait shadow-none"
+                  : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 hover:shadow-blue-500/30 cursor-pointer"
+              }`}
+            >
+              {fixLoading
+                ? <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    自动修复中...
+                  </>
+                : <>
+                    <SvgIcon name="sparkles" size={16} /> 一键智能修复 ({report.summary.fixable})
+                  </>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 格式检查区域 */}
       {formatCategories.length > 0 && (

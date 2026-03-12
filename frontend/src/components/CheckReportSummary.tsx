@@ -205,6 +205,7 @@ export default function CheckReportSummary({
             <button
               disabled={fixLoading}
               onClick={() => onFix(includeTextFix)}
+              aria-label="一键智能修复所有可修复项"
               className={`px-6 py-2.5 text-sm font-bold rounded-xl flex items-center gap-2 transition-all shadow-md ${
                 fixLoading
                   ? "bg-blue-400 text-white cursor-wait shadow-none"

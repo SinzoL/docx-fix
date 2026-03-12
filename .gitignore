@@ -52,3 +52,9 @@ CODEBUDDY.md
 .specify/
 tmp/
 tests/
+
+# AI 浏览器体验测试产物
+tests/browser_ai/.env
+tests/browser_ai/reports/
+tests/browser_ai/fixtures/*.docx
+docx-tmp/

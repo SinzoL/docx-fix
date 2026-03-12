@@ -9,7 +9,7 @@
     python -m engine.rule_extractor <模板docx文件> [--output <输出yaml路径>] [--name <规则名称>]
 """
 
-from .base import RuleExtractor, main
+from .base import RuleExtractor, main, rules_to_yaml
 from .constants import (
     NSMAP, W, FONT_ALIASES, HALF_PT_TO_CN_SIZE,
     ALIGNMENT_MAP, OrderedDumper, Color,
@@ -18,6 +18,7 @@ from .constants import (
 __all__ = [
     'RuleExtractor',
     'main',
+    'rules_to_yaml',
     'NSMAP',
     'W',
     'FONT_ALIASES',
