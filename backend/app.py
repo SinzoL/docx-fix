@@ -5,8 +5,6 @@ FastAPI 应用入口
 """
 
 import os
-import shutil
-import time
 import logging
 import asyncio
 from contextlib import asynccontextmanager
@@ -18,9 +16,9 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from config import TEMP_DIR, SESSION_EXPIRE_SECONDS, SESSION_CLEANUP_INTERVAL, CORS_ORIGINS, ENABLE_CORS_MIDDLEWARE, setup_logging  # noqa: E402
+from config import TEMP_DIR, SESSION_CLEANUP_INTERVAL, CORS_ORIGINS, ENABLE_CORS_MIDDLEWARE, setup_logging  # noqa: E402
 from api.routes import router  # noqa: E402
-from services.polisher_service import cleanup_expired_polish_sessions  # noqa: E402
+from services.session_manager import session_manager  # noqa: E402
 
 # 初始化日志
 setup_logging()
@@ -28,25 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 async def cleanup_expired_sessions():
-    """后台任务：定期清理过期的 session 目录"""
+    """后台任务：定期清理过期的 session（磁盘 + 内存）"""
     while True:
         try:
-            if os.path.exists(TEMP_DIR):
-                now = time.time()
-                cleaned = 0
-                for session_dir in os.listdir(TEMP_DIR):
-                    session_path = os.path.join(TEMP_DIR, session_dir)
-                    if os.path.isdir(session_path):
-                        mtime = os.path.getmtime(session_path)
-                        if now - mtime > SESSION_EXPIRE_SECONDS:
-                            shutil.rmtree(session_path, ignore_errors=True)
-                            cleaned += 1
-                if cleaned > 0:
-                    logger.info(f"清理了 {cleaned} 个过期 session 目录")
-
-            # 同步清理内存中的润色 session
-            cleanup_expired_polish_sessions()
-
+            session_manager.cleanup_all_expired()
         except Exception as e:
             logger.error(f"清理过期 session 时出错: {e}")
         await asyncio.sleep(SESSION_CLEANUP_INTERVAL)

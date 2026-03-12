@@ -19,14 +19,14 @@ from httpx import AsyncClient, ASGITransport
 
 # 设置项目路径
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPTS_DIR = os.path.join(BACKEND_DIR, "scripts")
+ENGINE_DIR = os.path.join(BACKEND_DIR, "engine")
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 
-# 确保 backend 和 scripts 目录都在 sys.path 中
+# 确保 backend 和 engine 目录都在 sys.path 中
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
-if SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, SCRIPTS_DIR)
+if ENGINE_DIR not in sys.path:
+    sys.path.insert(0, ENGINE_DIR)
 
 
 @pytest.fixture(scope="session")

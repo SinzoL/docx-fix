@@ -2,7 +2,7 @@
 polisher_service — 润色业务编排
 
 协调段落提取、LLM 润色、回写应用等流程。
-管理润色会话（session）的临时数据，支持磁盘持久化。
+Session 管理逻辑已抽取到 services.polish_session_store。
 """
 
 from __future__ import annotations
@@ -10,249 +10,22 @@ from __future__ import annotations
 import json
 import os
 import logging
-import time
-import threading
-from dataclasses import asdict
 from typing import AsyncGenerator
 
 from docx import Document
 
-from config import TEMP_DIR, SESSION_EXPIRE_SECONDS
-from scripts.polisher.text_extractor import TextExtractor, ParagraphSnapshot, RunInfo
-from scripts.polisher.polish_engine import PolishEngine, PolishSuggestion
-from scripts.polisher.text_writer import TextWriter
-from scripts.polisher.rule_scanner import RuleScanner
+from engine.polisher.text_extractor import TextExtractor, ParagraphSnapshot
+from engine.polisher.polish_engine import PolishEngine, PolishSuggestion
+from engine.polisher.text_writer import TextWriter
+from engine.polisher.rule_scanner import RuleScanner
+from services.session_manager import session_manager
+from services.polish_session_store import (
+    serialize_session_to_disk,
+    get_session,
+    check_session_exists,  # noqa: F401 — re-export for polish_routes.py
+)
 
 logger = logging.getLogger(__name__)
-
-# ========================================
-# 润色 session 内存存储（带过期 + 大小限制）
-# ========================================
-_sessions: dict[str, dict] = {}
-_sessions_lock = threading.Lock()
-
-# 单个 session 最大存活时间（秒），与文件 session 一致
-POLISH_SESSION_TTL = SESSION_EXPIRE_SECONDS  # 1 小时
-# 内存中最多保留的 session 数量（防 OOM）
-MAX_POLISH_SESSIONS = 50
-
-# 磁盘持久化文件名
-_SESSION_PERSIST_FILE = "_polish_session.json"
-
-
-def _touch_polish_session(session_id: str) -> None:
-    """更新润色 session 的最后访问时间，同时续命磁盘目录。
-
-    必须同步更新磁盘目录的 mtime，否则 app.py 后台清理任务
-    会按 mtime 删除目录，导致内存 session 还在但文件已被清除。
-    """
-    session = _sessions.get(session_id)
-    if session:
-        session["_last_access"] = time.time()
-        # 同步续命磁盘目录，避免与 app.py 清理时钟不一致
-        sd = _session_dir(session_id)
-        try:
-            os.utime(sd, None)
-        except OSError:
-            pass
-
-
-def cleanup_expired_polish_sessions() -> int:
-    """清理过期的润色 session 内存数据，返回清理数量。
-    由 app.py 的后台清理任务定期调用。"""
-    now = time.time()
-    expired_ids = []
-    with _sessions_lock:
-        for sid, session in _sessions.items():
-            last_access = session.get("_last_access", session.get("_created_at", 0))
-            if now - last_access > POLISH_SESSION_TTL:
-                expired_ids.append(sid)
-        for sid in expired_ids:
-            del _sessions[sid]
-    if expired_ids:
-        logger.info(f"清理了 {len(expired_ids)} 个过期润色 session（内存）")
-    return len(expired_ids)
-
-
-def _evict_if_needed() -> None:
-    """如果 session 数量超过上限，淘汰最旧的 session"""
-    with _sessions_lock:
-        if len(_sessions) <= MAX_POLISH_SESSIONS:
-            return
-        # 按最后访问时间排序，淘汰最旧的
-        sorted_sessions = sorted(
-            _sessions.items(),
-            key=lambda kv: kv[1].get("_last_access", 0),
-        )
-        evict_count = len(_sessions) - MAX_POLISH_SESSIONS
-        for sid, _ in sorted_sessions[:evict_count]:
-            del _sessions[sid]
-        logger.info(f"淘汰了 {evict_count} 个最旧的润色 session（内存上限 {MAX_POLISH_SESSIONS}）")
-
-
-def _session_dir(session_id: str) -> str:
-    """获取 session 的临时目录路径"""
-    return os.path.join(TEMP_DIR, session_id)
-
-
-# ========================================
-# 磁盘持久化：序列化 / 反序列化
-# ========================================
-
-def _serialize_session_to_disk(session_id: str, session: dict) -> None:
-    """将 session 的关键数据序列化到磁盘 JSON 文件。
-
-    持久化的字段：file_path, filename, snapshots, suggestions_data, applied,
-    polished_path, polished_filename, _applied_count, _created_at, _last_access。
-
-    ParagraphSnapshot / RunInfo 通过 dataclasses.asdict 转换为 dict。
-    """
-    session_dir = _session_dir(session_id)
-    os.makedirs(session_dir, exist_ok=True)
-    persist_path = os.path.join(session_dir, _SESSION_PERSIST_FILE)
-
-    try:
-        # 将 ParagraphSnapshot 列表序列化为 dict 列表
-        snapshots_data = []
-        for snap in session.get("snapshots", []):
-            if isinstance(snap, ParagraphSnapshot):
-                snapshots_data.append(asdict(snap))
-            elif isinstance(snap, dict):
-                snapshots_data.append(snap)
-
-        persist_data = {
-            "file_path": session.get("file_path"),
-            "filename": session.get("filename"),
-            "snapshots": snapshots_data,
-            "suggestions_data": session.get("suggestions_data", []),
-            "applied": session.get("applied", False),
-            "polished_path": session.get("polished_path"),
-            "polished_filename": session.get("polished_filename"),
-            "_applied_count": session.get("_applied_count", 0),
-            "_created_at": session.get("_created_at", time.time()),
-            "_last_access": session.get("_last_access", time.time()),
-        }
-
-        with open(persist_path, "w", encoding="utf-8") as f:
-            json.dump(persist_data, f, ensure_ascii=False)
-
-        logger.debug(f"[{session_id}] session 已持久化到磁盘")
-    except Exception as e:
-        logger.warning(f"[{session_id}] session 持久化失败: {e}")
-
-
-def _deserialize_snapshots(snapshots_data: list[dict]) -> list[ParagraphSnapshot]:
-    """从 dict 列表反序列化为 ParagraphSnapshot 列表"""
-    snapshots = []
-    for sd in snapshots_data:
-        runs = []
-        for rd in sd.get("runs", []):
-            runs.append(RunInfo(**rd))
-        snap = ParagraphSnapshot(
-            index=sd["index"],
-            text=sd["text"],
-            style_name=sd["style_name"],
-            element_type=sd["element_type"],
-            runs=runs,
-            is_polishable=sd.get("is_polishable", True),
-            skip_reason=sd.get("skip_reason"),
-        )
-        snapshots.append(snap)
-    return snapshots
-
-
-def _restore_session_from_disk(session_id: str) -> dict | None:
-    """尝试从磁盘恢复 session 数据到内存。
-
-    如果恢复成功，自动存入 _sessions 字典并返回；
-    如果磁盘文件不存在或已过期，返回 None。
-    """
-    session_dir = _session_dir(session_id)
-    persist_path = os.path.join(session_dir, _SESSION_PERSIST_FILE)
-
-    if not os.path.exists(persist_path):
-        return None
-
-    try:
-        with open(persist_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        # 检查是否过期（基于 _created_at）
-        created_at = data.get("_created_at", 0)
-        if time.time() - created_at > POLISH_SESSION_TTL:
-            logger.info(f"[{session_id}] 磁盘 session 已过期，跳过恢复")
-            return None
-
-        # 检查原始文件是否还存在
-        file_path = data.get("file_path")
-        if not file_path or not os.path.exists(file_path):
-            logger.info(f"[{session_id}] 原始文件已不存在，无法恢复 session")
-            return None
-
-        # 反序列化 snapshots
-        snapshots = _deserialize_snapshots(data.get("snapshots", []))
-
-        # 构建内存 session
-        now = time.time()
-        session = {
-            "file_path": data["file_path"],
-            "filename": data["filename"],
-            "snapshots": snapshots,
-            "suggestions_data": data.get("suggestions_data", []),
-            "applied": data.get("applied", False),
-            "polished_path": data.get("polished_path"),
-            "polished_filename": data.get("polished_filename"),
-            "_applied_count": data.get("_applied_count", 0),
-            "_created_at": created_at,
-            "_last_access": now,
-        }
-
-        # 存入内存并返回
-        _evict_if_needed()
-        _sessions[session_id] = session
-        logger.info(f"[{session_id}] session 已从磁盘恢复到内存")
-        return session
-
-    except Exception as e:
-        logger.warning(f"[{session_id}] 从磁盘恢复 session 失败: {e}")
-        return None
-
-
-def _get_session(session_id: str) -> dict | None:
-    """获取 session：先查内存，miss 后尝试从磁盘恢复"""
-    session = _sessions.get(session_id)
-    if session is not None:
-        return session
-    return _restore_session_from_disk(session_id)
-
-
-def check_session_exists(session_id: str) -> dict:
-    """检查 session 是否存在且可用。
-
-    除了检查内存/磁盘 session 元数据是否存在，还会验证
-    底层文件是否真正存在（防止磁盘已被清理但内存未同步）。
-
-    Returns:
-        {"exists": True/False, "applied": bool, "filename": str}
-    """
-    session = _get_session(session_id)
-    if session is None:
-        return {"exists": False, "applied": False, "filename": ""}
-
-    # 验证底层文件是否仍然存在（防止磁盘已被清理）
-    file_path = session.get("file_path")
-    if not file_path or not os.path.exists(file_path):
-        # 磁盘文件已丢失，清理内存中的无效 session
-        with _sessions_lock:
-            _sessions.pop(session_id, None)
-        return {"exists": False, "applied": False, "filename": ""}
-
-    _touch_polish_session(session_id)
-    return {
-        "exists": True,
-        "applied": session.get("applied", False),
-        "filename": session.get("filename", ""),
-    }
 
 
 async def polish_file(
@@ -282,18 +55,15 @@ async def polish_file(
         f"其中 {sum(1 for s in snapshots if s.is_polishable)} 段可润色"
     )
 
-    # 2. 保存 session 数据（带时间戳）
-    _evict_if_needed()
-    now = time.time()
-    _sessions[session_id] = {
+    # 2. 保存 session 数据（通过 SessionManager）
+    session_data = {
         "file_path": file_path,
         "filename": filename,
         "snapshots": snapshots,
         "suggestions": [],
         "applied": False,
-        "_created_at": now,
-        "_last_access": now,
     }
+    session = session_manager.create_memory_session(session_id, session_data)
 
     # 3. 规则扫描阶段（毫秒级，先于 LLM 润色）
     rule_scanner = RuleScanner()
@@ -341,18 +111,18 @@ async def polish_file(
             )
 
             # 将合并后的数据存入 session
-            _sessions[session_id]["suggestions_data"] = all_suggestions
+            session["suggestions_data"] = all_suggestions
             event_data["suggestions"] = all_suggestions
             event_data["summary"] = merged_summary
             event_data["session_id"] = session_id
             event_data["filename"] = filename
 
             # 持久化 session 到磁盘（后端重启后仍可恢复）
-            _serialize_session_to_disk(session_id, _sessions[session_id])
+            serialize_session_to_disk(session_id, session)
 
         yield _format_sse(event_name, event_data)
 
-    logger.info(f"[{session_id}] 润色完成（规则 {len(rule_suggestions)} + LLM {len(llm_suggestions)} → 合并 {len(_sessions[session_id].get('suggestions_data', []))} 条）")
+    logger.info(f"[{session_id}] 润色完成（规则 {len(rule_suggestions)} + LLM {len(llm_suggestions)} → 合并 {len(session.get('suggestions_data', []))} 条）")
 
 
 async def apply_polish(
@@ -371,11 +141,11 @@ async def apply_polish(
     Raises:
         ValueError: session 不存在或已应用
     """
-    session = _get_session(session_id)
+    session = get_session(session_id)
     if not session:
         raise ValueError(f"润色会话 '{session_id}' 不存在或已过期")
 
-    _touch_polish_session(session_id)
+    session_manager.touch(session_id)
 
     # 幂等保护：如果已应用，直接返回上次结果（而不是报错）
     if session.get("applied"):
@@ -422,8 +192,7 @@ async def apply_polish(
         applied_count = writer.apply_suggestions(accepted_suggestions, snapshots)
 
         # 保存修改后的文件
-        session_dir = _session_dir(session_id)
-        os.makedirs(session_dir, exist_ok=True)
+        session_dir = session_manager.create_session_dir(session_id)
 
         base, ext = os.path.splitext(filename)
         polished_filename = f"{base}_polished{ext}"
@@ -441,7 +210,7 @@ async def apply_polish(
     session["_applied_count"] = applied_count
 
     # 更新磁盘持久化数据
-    _serialize_session_to_disk(session_id, session)
+    serialize_session_to_disk(session_id, session)
 
     logger.info(
         f"[{session_id}] 应用了 {applied_count}/{len(accepted_suggestions)} 条修改"
@@ -464,11 +233,11 @@ def get_polished_file(session_id: str) -> tuple[str, str]:
     Raises:
         ValueError: session 不存在或文件未就绪
     """
-    session = _get_session(session_id)
+    session = get_session(session_id)
     if not session:
         raise ValueError(f"润色会话 '{session_id}' 不存在或已过期")
 
-    _touch_polish_session(session_id)
+    session_manager.touch(session_id)
 
     polished_path = session.get("polished_path")
     if not polished_path or not os.path.exists(polished_path):

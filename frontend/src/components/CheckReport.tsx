@@ -21,6 +21,7 @@ import type {
   AiReviewResult,
 } from "../types";
 import { reviewConventions, checkCheckSessionStatus } from "../services/api";
+import { useSessionHeartbeat } from "../hooks/useSessionHeartbeat";
 import RuleDetail from "./RuleDetail";
 import AiSummary from "./AiSummary";
 import AiChatPanel from "./AiChatPanel";
@@ -126,18 +127,7 @@ export default function CheckReportView({
   }, [report.text_convention_meta, sessionId]);
 
   // 心跳续命：session 存活且非只读时，每 15 分钟自动 touch session
-  useEffect(() => {
-    if (!sessionId || readOnly || sessionExpired) return;
-
-    const HEARTBEAT_INTERVAL = 15 * 60 * 1000; // 15 分钟
-    const timer = setInterval(() => {
-      checkCheckSessionStatus(sessionId).catch(() => {
-        // 心跳失败不影响用户操作，静默处理
-      });
-    }, HEARTBEAT_INTERVAL);
-
-    return () => clearInterval(timer);
-  }, [sessionId, readOnly, sessionExpired]);
+  useSessionHeartbeat(sessionId, checkCheckSessionStatus, { readOnly, sessionExpired });
 
   // 分层分组：格式检查 vs 文本排版习惯
   const { formatItems, textConventionItems, formatGroups, tcGroups } = useMemo(() => {

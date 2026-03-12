@@ -22,8 +22,8 @@ from api.schemas import (
     CheckItemResult,
     CheckStatus,
 )
-from scripts.checker import DocxChecker
-from scripts.fixer import DocxFixer
+from engine.checker import DocxChecker
+from engine.fixer import DocxFixer
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def run_fix(
     if include_text_fix:
         try:
             from docx import Document
-            from scripts.text_convention_fixer import run_text_convention_fixes
+            from engine.fixer.text_convention_fixer import run_text_convention_fixes
 
             # 读取规则
             with open(rules_path, 'r', encoding='utf-8') as f:
@@ -143,7 +143,7 @@ def run_fix(
             message=r.message,
             location=r.location,
             fixable=r.fixable,
-            check_layer="format" if not r.category.startswith("通用·") else "text_convention",
+            check_layer=r.check_layer,
         )
         for r in checker_after.results
     ]

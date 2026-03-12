@@ -23,8 +23,8 @@ TEMP_DIR = os.environ.get("DOCX_FIX_TEMP_DIR", "/tmp/docx-fix")
 # 规则文件目录
 RULES_DIR = str(BACKEND_DIR / "rules")
 
-# 脚本目录
-SCRIPTS_DIR = str(BACKEND_DIR / "scripts")
+# 引擎目录
+ENGINE_DIR = str(BACKEND_DIR / "engine")
 
 
 # ========================================

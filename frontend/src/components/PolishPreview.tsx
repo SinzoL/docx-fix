@@ -15,6 +15,7 @@ import { SvgIcon } from "./icons/SvgIcon";
 import type { PolishSuggestion, PolishSummary } from "../types";
 import { updatePolishDecisions } from "../services/cache";
 import { checkPolishSessionStatus } from "../services/api";
+import { useSessionHeartbeat } from "../hooks/useSessionHeartbeat";
 
 interface PolishPreviewProps {
   suggestions: PolishSuggestion[];
@@ -66,21 +67,19 @@ export default function PolishPreview({
   });
 
   // 心跳续命：每 15 分钟自动 touch session，防止用户长时间查看时 session 过期
-  useEffect(() => {
-    if (!sessionId || readOnly || sessionExpired) return;
-
-    const HEARTBEAT_INTERVAL = 15 * 60 * 1000; // 15 分钟
-    const timer = setInterval(() => {
-      checkPolishSessionStatus(sessionId).catch(() => {
-        // 心跳失败不影响用户操作，静默处理
-      });
-    }, HEARTBEAT_INTERVAL);
-
-    return () => clearInterval(timer);
-  }, [sessionId, readOnly, sessionExpired]);
+  useSessionHeartbeat(sessionId, checkPolishSessionStatus, { readOnly, sessionExpired });
 
   // 防抖定时器，避免频繁写入 IndexedDB
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 卸载时清理防抖定时器，避免组件销毁后仍触发异步写入
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   // 当前筛选类型
   const [filterType, setFilterType] = useState<string>("all");

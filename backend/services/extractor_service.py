@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import yaml
-from scripts.rule_extractor import RuleExtractor, OrderedDumper
+from engine.rule_extractor import RuleExtractor, OrderedDumper
 
 
 def run_extract(

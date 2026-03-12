@@ -7,7 +7,6 @@ API 公共工具函数
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import logging
@@ -21,6 +20,7 @@ from api.schemas import ErrorResponse
 from config import TEMP_DIR, MAX_FILE_SIZE, MAX_CONCURRENT_UPLOADS
 from services.rules_service import get_rules_list, get_rule_path
 from services import llm_service
+from services.session_manager import session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -80,50 +80,25 @@ def safe_filename(filename: str) -> str:
 
 
 # ========================================
-# Session 管理
+# Session 管理（委托给 SessionManager）
 # ========================================
 
 def touch_session(session_dir: str) -> None:
     """更新 session 目录的 mtime，防止活跃 session 被误清理。"""
-    try:
-        os.utime(session_dir, None)
-    except OSError:
-        pass
+    session_id = os.path.basename(session_dir)
+    session_manager.touch(session_id)
 
 
 def read_session_meta(session_dir: str) -> dict:
     """读取 session 元信息。兼容旧格式 _meta.txt 和新格式 _meta.json。"""
-    json_path = os.path.join(session_dir, "_meta.json")
-    txt_path = os.path.join(session_dir, "_meta.txt")
-
-    # 优先读取 JSON 格式
-    if os.path.exists(json_path):
-        try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    # 兼容旧的 _meta.txt 格式
-    if os.path.exists(txt_path):
-        try:
-            with open(txt_path, "r", encoding="utf-8") as f:
-                lines = f.read().strip().split("\n")
-                meta = {"filename": lines[0] if lines else "unknown.docx"}
-                if len(lines) > 1:
-                    meta["rule_id"] = lines[1]
-                return meta
-        except OSError:
-            pass
-
-    return {}
+    session_id = os.path.basename(session_dir)
+    return session_manager.read_meta(session_id)
 
 
 def write_session_meta(session_dir: str, meta: dict) -> None:
     """写入 session 元信息（JSON 格式）。"""
-    json_path = os.path.join(session_dir, "_meta.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
+    session_id = os.path.basename(session_dir)
+    session_manager.write_meta(session_id, meta)
 
 
 # ========================================

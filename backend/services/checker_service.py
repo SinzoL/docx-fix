@@ -18,8 +18,8 @@ from api.schemas import (
     TextConventionMeta,
     DisputedItem,
 )
-from scripts.checker import DocxChecker
-from scripts.checker.text_convention_checker import TextIssue
+from engine.checker import DocxChecker
+from engine.checker.text_convention_checker import TextIssue
 
 
 def run_check(
@@ -61,7 +61,7 @@ def run_check(
                 message=r.message,
                 location=r.location,
                 fixable=r.fixable,
-                check_layer="format" if not r.category.startswith("通用·") else "text_convention",
+                check_layer=r.check_layer,
             )
         )
 
