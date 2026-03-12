@@ -13,6 +13,9 @@ import type {
   ExtractResult,
   AiGenerateRulesResponse,
   AiReviewConventionsResponse,
+  ExtractReviewResponse,
+  ColoredTextParagraph,
+  HeadingStructureItem,
   DisputedItem,
   PolishApplyResponse,
   PolishSessionStatus,
@@ -149,7 +152,8 @@ export async function checkFile(
   file: File,
   ruleId: string,
   sessionId: string,
-  customRulesYaml?: string
+  customRulesYaml?: string,
+  selectedRuleId?: string,
 ): Promise<CheckReport> {
   const formData = new FormData();
   formData.append("file", file);
@@ -157,6 +161,9 @@ export async function checkFile(
   formData.append("session_id", sessionId);
   if (customRulesYaml) {
     formData.append("custom_rules_yaml", customRulesYaml);
+  }
+  if (selectedRuleId) {
+    formData.append("selected_rule_id", selectedRuleId);
   }
 
   const response = await fetchWithRetry(`${API_BASE}/check`, {
@@ -175,7 +182,8 @@ export async function checkFile(
 export async function recheckFile(
   sessionId: string,
   ruleId: string,
-  customRulesYaml?: string
+  customRulesYaml?: string,
+  selectedRuleId?: string,
 ): Promise<CheckReport> {
   const body: Record<string, string> = {
     session_id: sessionId,
@@ -183,6 +191,9 @@ export async function recheckFile(
   };
   if (customRulesYaml) {
     body.custom_rules_yaml = customRulesYaml;
+  }
+  if (selectedRuleId) {
+    body.selected_rule_id = selectedRuleId;
   }
 
   const response = await fetchWithRetry(`${API_BASE}/recheck`, {
@@ -290,6 +301,39 @@ export async function extractRules(
   }, 1);
 
   return handleResponse<ExtractResult>(response);
+}
+
+/**
+ * POST /api/extract-rules/review — LLM 智能审核提取结果
+ *
+ * 对提取的规则进行四维度审核，返回审核建议列表。
+ * LLM 不可用时返回空列表。
+ */
+export async function reviewExtractRules(
+  yamlContent: string,
+  coloredTextParagraphs: ColoredTextParagraph[],
+  headingStructure: HeadingStructureItem[],
+  signal?: AbortSignal,
+): Promise<ExtractReviewResponse> {
+  const response = await fetchWithRetry(
+    `${API_BASE}/extract-rules/review`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        yaml_content: yamlContent,
+        colored_text_paragraphs: coloredTextParagraphs,
+        heading_structure: headingStructure,
+      }),
+      signal,
+    },
+    0, // 不重试（LLM 调用本身已有超时控制）
+    60_000, // 60 秒超时（LLM 调用需要更长时间）
+  );
+
+  return handleResponse<ExtractReviewResponse>(response);
 }
 
 /**

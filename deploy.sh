@@ -217,13 +217,13 @@ build_and_deploy() {
 
         # 简单健康检查
         echo "========== 健康检查 =========="
-        if curl -sf http://localhost:8000/docs > /dev/null 2>&1; then
+        if docker compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')" > /dev/null 2>&1; then
             echo "✅ Backend API 正常"
         else
             echo "❌ Backend API 异常"
         fi
 
-        if curl -sf http://localhost:5173/ > /dev/null 2>&1; then
+        if docker compose exec -T frontend sh -c "wget -q -O /dev/null http://localhost/" > /dev/null 2>&1; then
             echo "✅ Frontend 正常"
         else
             echo "❌ Frontend 异常"

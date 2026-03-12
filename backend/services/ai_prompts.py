@@ -474,3 +474,137 @@ def build_reviewer_messages(
         {"role": "system", "content": REVIEWER_SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+# ============================================================
+# 7. 模板提取 LLM 智能审核
+# ============================================================
+
+REVIEW_EXTRACT_SYSTEM_PROMPT = """你是一个专业的 Word 文档格式规范审核专家。你的任务是审核从 Word 模板中自动提取的格式规则（YAML），识别其中可能的错误、遗漏和矛盾。
+
+你将收到三类输入：
+1. 提取后的 YAML 规则内容
+2. 模板中特殊颜色字体段落的文本列表（含颜色值，这些文字可能包含模板作者的格式说明，也可能只是普通标注）
+3. 文档的标题结构摘要（标题文字、所用样式、大纲级别，其中 outline_level=0 对应一级标题 Heading 1）
+
+请从以下四个维度进行审核：
+
+【维度一：标题级别异常】
+- 检查标题文字是否与其大纲级别匹配
+- "第X章" / "第X部分" 通常对应一级标题（Heading 1, outline_level=0）
+- "X.X" 格式通常对应二级标题（Heading 2, outline_level=1）
+- "X.X.X" 格式通常对应三级标题（Heading 3, outline_level=2）
+- 如果发现不匹配，给出具体的修正建议
+
+【维度二：特殊颜色字体隐含规则】
+- 分析特殊颜色字体中的文本，判断是否包含隐含的格式要求
+- 如果包含格式要求（如字体、字号、行距、缩进、对齐方式等），提取出来并生成对应的 YAML 补丁
+- 如果只是普通标注、注释或说明性文字，不含格式要求，则不要生成建议
+- 常见的格式说明关键词：字体、字号、号、行距、缩进、对齐、居中、加粗、磅、倍等
+- 常见中文字号对照：初号=42pt, 小初=36pt, 一号=26pt, 小一=24pt, 二号=22pt, 小二=18pt, 三号=16pt, 小三=15pt, 四号=14pt, 小四=12pt, 五号=10.5pt, 小五=9pt
+
+【维度三：规则内部矛盾】
+- 交叉验证 styles 定义与 special_checks 中的一致性检查
+- 检查 page_setup 与 header_footer 的配合是否合理
+- 检查 numbering 定义与 structure 中的映射是否一致
+- 重点关注字号、行距等核心属性在不同位置的定义是否一致
+
+【维度四：综合质量评估】
+- 检查是否有常见的缺失项（如缺少正文行距规则）
+- 检查编号定义是否完整
+- 标注其他可疑问题
+
+请严格以 JSON 数组格式输出审核结果，不要输出任何额外的解释文字。每条建议的格式如下：
+
+```json
+[
+  {
+    "category": "heading_error | hidden_rule | contradiction | quality",
+    "severity": "error | warning | info",
+    "description": "问题描述，使用通俗中文",
+    "section_path": "影响的YAML节路径，如 styles.Normal.paragraph",
+    "yaml_snippet": "可直接融入 section_path 对应位置的合法 YAML 片段",
+    "source_text": "原始段落文本（仅 hidden_rule 类别需要填写，其他填空字符串）"
+  }
+]
+```
+
+约束：
+- 不要输出 id 字段，ID 由系统自动生成
+- category 必须是以下之一：heading_error、hidden_rule、contradiction、quality
+- severity 必须是以下之一：error、warning、info
+- yaml_snippet 必须是合法的 YAML 格式，能直接作为 section_path 所指位置的子内容
+- section_path 使用点号分隔的路径格式，如 "styles.Normal.paragraph"
+- 如果没有发现任何问题，输出空数组 []
+- 不要修改或重新输出原始 YAML，只输出建议性补丁
+- source_text 仅在 category 为 hidden_rule 时填写原始段落文本，其他类别填空字符串"""
+
+
+def build_review_extract_messages(
+    yaml_content: str,
+    colored_text_paragraphs: list[dict],
+    heading_structure: list[dict],
+) -> list[dict]:
+    """构建模板提取审核请求的消息列表。
+
+    Args:
+        yaml_content: 提取后的 YAML 规则内容
+        colored_text_paragraphs: 特殊颜色字体段落列表
+            [{"index", "text", "color", "prev_text", "next_text"}]
+        heading_structure: 标题结构摘要列表
+            [{"index", "text", "style_name", "outline_level"}]
+
+    Returns:
+        OpenAI 格式的 messages 列表
+    """
+    parts = ["请审核以下从 Word 模板中自动提取的格式规则。\n"]
+
+    # 1. YAML 规则内容
+    parts.append("【提取的 YAML 规则】")
+    parts.append("```yaml")
+    parts.append(yaml_content)
+    parts.append("```\n")
+
+    # 2. 特殊颜色字体段落
+    if colored_text_paragraphs:
+        parts.append("【特殊颜色字体段落】（这些文字可能包含格式要求，也可能只是普通标注，请自行判断）")
+        for item in colored_text_paragraphs:
+            color = item.get("color", "未知")
+            text = item.get("text", "")
+            idx = item.get("index", -1)
+            prev_text = item.get("prev_text", "")
+            next_text = item.get("next_text", "")
+            parts.append(f"- 段落{idx}（颜色: #{color}）: \"{text}\"")
+            if prev_text:
+                parts.append(f"  上文: \"{prev_text}\"")
+            if next_text:
+                parts.append(f"  下文: \"{next_text}\"")
+        parts.append("")
+    else:
+        parts.append("【特殊颜色字体段落】无\n")
+
+    # 3. 标题结构摘要（outline_level 做 +1 转换附说明）
+    if heading_structure:
+        parts.append("【文档标题结构】")
+        for item in heading_structure:
+            text = item.get("text", "")
+            style = item.get("style_name", "")
+            level = item.get("outline_level", 0)
+            heading_n = level + 1  # outline_level=0 → Heading 1
+            idx = item.get("index", -1)
+            parts.append(
+                f"- 段落{idx}: \"{text}\" — 样式: {style}, "
+                f"outline_level={level}（即 {heading_n} 级标题, Heading {heading_n}）"
+            )
+        parts.append("")
+    else:
+        parts.append("【文档标题结构】无\n")
+
+    parts.append("请按照四个审核维度进行分析，以 JSON 数组格式输出审核结果。")
+
+    user_content = "\n".join(parts)
+
+    return [
+        {"role": "system", "content": REVIEW_EXTRACT_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]

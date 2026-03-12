@@ -27,16 +27,13 @@ from api._helpers import (
     write_session_meta,
     resolve_rules,
     validate_and_read_upload,
+    upload_semaphore,
 )
 from services.checker_service import run_check
-from config import MAX_CONCURRENT_UPLOADS
 
 logger = logging.getLogger(__name__)
 
 check_router = APIRouter(tags=["Check"])
-
-# 并发上传信号量
-_upload_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
 
 
 # ========================================
@@ -48,19 +45,19 @@ async def check_file(
     rule_id: str = Form(default="default"),
     session_id: str = Form(default=""),
     custom_rules_yaml: Optional[str] = Form(default=None),
+    selected_rule_id: Optional[str] = Form(default=None),
 ):
     """上传 .docx 文件并执行格式检查。
 
     当 custom_rules_yaml 非空时，使用该自定义 YAML 规则内容进行检查，
     忽略 rule_id 指定的服务端预置规则。
     """
-    # 1. 验证文件（不占信号量）
-    content = await validate_and_read_upload(file)
-
-    # 并发限制
-    if _upload_semaphore.locked():
-        logger.warning("并发上传数已达上限，拒绝新请求")
-    async with _upload_semaphore:
+    # 并发限制（前移到文件读取之前，避免多个大文件同时读入内存）
+    if upload_semaphore.locked():
+        logger.warning("并发上传数已达上限，排队等待")
+    async with upload_semaphore:
+        # 1. 验证并读取文件
+        content = await validate_and_read_upload(file)
 
         # 2. 解析规则来源
         resolved = resolve_rules(rule_id, custom_rules_yaml)
@@ -79,11 +76,15 @@ async def check_file(
         with open(filepath, "wb") as f:
             f.write(content)
 
-        # 保存元信息（JSON 格式）
-        write_session_meta(session_dir, {
+        # 保存元信息（JSON 格式，含自定义规则与真实选择身份以便恢复）
+        meta = {
             "filename": safe_name,
             "rule_id": rule_id,
-        })
+            "selected_rule_id": selected_rule_id or rule_id,
+        }
+        if custom_rules_yaml:
+            meta["custom_rules_yaml"] = custom_rules_yaml
+        write_session_meta(session_dir, meta)
 
         # 5. 执行检查（同步 CPU 密集型操作，放到线程池避免阻塞事件循环）
         try:
@@ -133,8 +134,7 @@ async def recheck_file(request: RecheckRequest):
     touch_session(session_dir)
 
     # 并发限制
-    async with _upload_semaphore:
-
+    async with upload_semaphore:
         # 读取元信息
         meta = read_session_meta(session_dir)
         filename = meta.get("filename", "unknown.docx")
@@ -153,8 +153,13 @@ async def recheck_file(request: RecheckRequest):
         # 解析规则来源
         resolved = resolve_rules(request.rule_id, request.custom_rules_yaml)
 
-        # 更新元信息中的 rule_id
+        # 更新元信息中的 rule_id、selected_rule_id 及自定义规则
         meta["rule_id"] = request.rule_id
+        meta["selected_rule_id"] = request.selected_rule_id or request.rule_id
+        if request.custom_rules_yaml:
+            meta["custom_rules_yaml"] = request.custom_rules_yaml
+        else:
+            meta.pop("custom_rules_yaml", None)
         write_session_meta(session_dir, meta)
 
         # 执行检查
@@ -204,6 +209,8 @@ async def check_session_status(session_id: str):
     meta = read_session_meta(session_dir)
     filename = meta.get("filename", "")
     rule_id = meta.get("rule_id", "")
+    selected_rule_id = meta.get("selected_rule_id") or rule_id
+    custom_rules_yaml = meta.get("custom_rules_yaml")
 
     # 验证原始文件是否还存在
     filepath = os.path.join(session_dir, filename) if filename else ""
@@ -217,4 +224,6 @@ async def check_session_status(session_id: str):
         exists=True,
         filename=filename,
         rule_id=rule_id,
+        custom_rules_yaml=custom_rules_yaml,
+        selected_rule_id=selected_rule_id,
     )

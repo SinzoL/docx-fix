@@ -73,10 +73,13 @@ export default function ExtractTextMode({
       </div>
 
       {/* 生成按钮 */}
-      <div className="p-4 sm:p-5 bg-slate-50/50 border-t border-slate-200/50 flex items-center justify-between">
-        <span className="text-xs text-slate-400">
-          {textInput.length > 0 ? `${textInput.length} 字` : "请输入格式要求"}
-        </span>
+      <div className="p-4 sm:p-5 bg-slate-50/50 border-t border-slate-200/50 flex items-center justify-between gap-4">
+        <div className="space-y-1">
+          <span className="block text-xs text-slate-400">
+            {textInput.length > 0 ? `${textInput.length} 字` : "请输入格式要求"}
+          </span>
+          <span className="block text-xs text-slate-400">点击生成后，输入内容会发送到 AI 服务生成规则；结果仅保存在当前浏览器。</span>
+        </div>
         <button
           onClick={onGenerate}
           disabled={!textInput.trim() || llmLoading}

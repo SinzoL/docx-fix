@@ -121,7 +121,7 @@ export default function ExtractUploadMode({
       {/* 隐私提示 + 提取按钮 */}
       <div className="px-4 sm:px-6 pb-2 flex items-start gap-2 text-xs text-slate-400">
         <SvgIcon name="shield-check" size={14} className="text-emerald-400 mt-0.5 flex-shrink-0" />
-        <span>模板文档仅在提取期间临时处理，处理完成后立即从服务器删除，不会被存储或用于任何其他用途。</span>
+        <span>模板文档仅在本次提取与审核过程中于服务器临时保留，完成后即清除；提取结果历史仅缓存在浏览器本地。若启用 AI 审核，提取出的 YAML 和必要上下文会发送到 AI 服务。</span>
       </div>
       <div className="p-4 sm:p-5 bg-slate-50/50 border-t border-slate-200/50 flex justify-end">
         <button

@@ -33,15 +33,22 @@ interface CheckReportProps {
   onFix: (includeTextFix?: boolean) => void;
   fixLoading: boolean;
   sessionId?: string;
-  onRecheck?: (report: CheckReportType) => void;
+  /** 当前全局恢复出的规则身份（含 custom:xxx） */
+  selectedRuleId?: string;
+  onSelectedRuleIdChange?: (ruleId: string) => void;
+  onRecheck?: (report: CheckReportType, nextSelectedRuleId?: string, nextCustomRulesYaml?: string) => void;
   /** #13: 只读模式（后端 session 过期时启用，禁用修复和切换规则） */
   readOnly?: boolean;
   /** 后端 session 是否已过期（用于区分提示文案） */
   sessionExpired?: boolean;
   /** 正在验证 session 状态 */
   restoring?: boolean;
-  /** #2: 当前自定义规则 YAML */
+  /** #2: 当前选中规则 YAML */
   customRulesYaml?: string;
+  /** 可恢复的历史自定义规则 ID */
+  restorableCustomRuleId?: string;
+  /** 可恢复的历史自定义规则 YAML */
+  restorableCustomRulesYaml?: string;
   /** #2: 自定义规则 YAML 变更回调 */
   onCustomRulesYamlChange?: (yaml: string | undefined) => void;
 }
@@ -51,13 +58,22 @@ export default function CheckReportView({
   onFix,
   fixLoading,
   sessionId,
+  selectedRuleId: currentSelectedRuleId,
+  onSelectedRuleIdChange,
   onRecheck,
   readOnly = false,
   sessionExpired = false,
   restoring = false,
+  customRulesYaml,
+  restorableCustomRuleId,
+  restorableCustomRulesYaml,
   onCustomRulesYamlChange,
 }: CheckReportProps) {
-  const [selectedRuleId, setSelectedRuleId] = useState(report.rule_id);
+  const selectedRuleId = currentSelectedRuleId || report.rule_id;
+  const displayCustomRulesYaml =
+    selectedRuleId === restorableCustomRuleId && restorableCustomRulesYaml
+      ? customRulesYaml || restorableCustomRulesYaml
+      : customRulesYaml;
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
 
@@ -225,8 +241,8 @@ export default function CheckReportView({
         onFix={onFix}
         fixLoading={fixLoading}
         sessionId={sessionId}
-        onRecheck={(newReport) => {
-          onRecheck?.(newReport);
+        onRecheck={(newReport, nextSelectedRuleId, nextCustomRulesYaml) => {
+          onRecheck?.(newReport, nextSelectedRuleId, nextCustomRulesYaml);
           setAiReviews({});
         }}
         readOnly={readOnly}
@@ -239,7 +255,9 @@ export default function CheckReportView({
         onOpenDrawer={() => setDrawerVisible(true)}
         onOpenChat={() => setChatVisible(true)}
         selectedRuleId={selectedRuleId}
-        onSelectedRuleIdChange={setSelectedRuleId}
+        onSelectedRuleIdChange={onSelectedRuleIdChange || (() => {})}
+        restorableCustomRuleId={restorableCustomRuleId}
+        restorableCustomRulesYaml={restorableCustomRulesYaml}
       />
 
       {/* 格式检查区域 */}
@@ -316,10 +334,21 @@ export default function CheckReportView({
       <Drawer
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
-        header={<span className="font-display font-bold text-lg">规则详情 - {report.rule_name}</span>}
+        header={<span className="font-display font-bold text-lg">规则详情 - {selectedRuleId.startsWith("custom:") ? "自定义规则" : report.rule_name}</span>}
         size="medium"
       >
-        <RuleDetail ruleId={selectedRuleId} />
+        {selectedRuleId.startsWith("custom:") ? (
+          displayCustomRulesYaml ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">当前查看的是自定义规则，下面展示恢复出的 YAML 内容。</p>
+              <pre className="text-xs leading-6 whitespace-pre-wrap break-words bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-auto">{displayCustomRulesYaml}</pre>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500">当前为自定义规则，但本地已缺少可展示的 YAML 内容。</div>
+          )
+        ) : (
+          <RuleDetail ruleId={selectedRuleId} />
+        )}
       </Drawer>
 
       {/* AI 对话面板 */}

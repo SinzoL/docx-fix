@@ -4,15 +4,18 @@
  * 负责：操作栏（重新提取/下载/保存）、摘要卡片、YAML 预览、保存对话框
  */
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Input, Dialog } from "tdesign-react";
 import { SvgIcon } from "./icons/SvgIcon";
+import ExtractReviewPanel from "./ExtractReviewPanel";
 import {
   highlightYaml,
   parseYamlSections,
   YAML_HIGHLIGHT_STYLES,
 } from "../utils/yamlHighlight";
-import type { ExtractResult, ExtractSummary } from "../types";
+import { mergeMultiplePatches } from "../utils/yamlMerge";
+import { reviewExtractRules } from "../services/api";
+import type { ExtractResult, ExtractSummary, ExtractReviewItem } from "../types";
 
 /** 摘要检测模块配置 */
 const SUMMARY_MODULES: {
@@ -37,6 +40,8 @@ interface ExtractResultViewProps {
   saveDialogVisible: boolean;
   onSaveDialogVisibleChange: (visible: boolean) => void;
   children?: React.ReactNode; // 用于插入 RuleManager
+  /** 当前生效的 YAML 内容（合并审核建议后的），供父组件保存时使用 */
+  onYamlContentChange?: (yaml: string) => void;
 }
 
 export default function ExtractResultView({
@@ -48,7 +53,134 @@ export default function ExtractResultView({
   saveDialogVisible,
   onSaveDialogVisibleChange,
   children,
+  onYamlContentChange,
 }: ExtractResultViewProps) {
+  // ========================================
+  // 审核状态管理
+  // ========================================
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewItems, setReviewItems] = useState<ExtractReviewItem[]>([]);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
+  const reviewAbortRef = useRef<AbortController | null>(null);
+
+  // 当前展示的 YAML 内容（可能合并了审核建议）
+  const [displayYaml, setDisplayYaml] = useState(result.yaml_content);
+
+  // 提取完成后自动发起审核请求
+  useEffect(() => {
+    const ctx = result.review_context;
+    if (!ctx) return;
+
+    // 上次请求未完成时取消
+    if (reviewAbortRef.current) {
+      reviewAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    reviewAbortRef.current = controller;
+
+    queueMicrotask(() => {
+      setReviewLoading(true);
+      setReviewError(null);
+      setReviewItems([]);
+      setAcceptedIds(new Set());
+      setFailedIds(new Set());
+    });
+
+    reviewExtractRules(
+      result.yaml_content,
+      ctx.colored_text_paragraphs || [],
+      ctx.heading_structure || [],
+      controller.signal,
+    )
+      .then((resp) => {
+        if (!controller.signal.aborted) {
+          setReviewItems(resp.review_items || []);
+          setReviewLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          // 降级处理：不展示审核面板
+          if (err?.name === "AbortError") {
+            setReviewError("审核超时");
+          } else {
+            setReviewError(err?.message || "审核失败");
+          }
+          setReviewLoading(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [result]);
+
+  // 重新计算合并后的 YAML
+  const recalcMergedYaml = useCallback(
+    (newAcceptedIds: Set<string>) => {
+      if (newAcceptedIds.size === 0) {
+        setDisplayYaml(result.yaml_content);
+        onYamlContentChange?.(result.yaml_content);
+        setFailedIds(new Set());
+        return;
+      }
+
+      const patches = reviewItems
+        .filter((item) => newAcceptedIds.has(item.id) && item.yaml_snippet)
+        .map((item) => ({
+          sectionPath: item.section_path,
+          yamlSnippet: item.yaml_snippet,
+        }));
+
+      const { yaml: merged, failedPaths } = mergeMultiplePatches(
+        result.yaml_content,
+        patches,
+      );
+
+      setDisplayYaml(merged);
+      onYamlContentChange?.(merged);
+
+      // 标记合并失败的建议
+      const newFailed = new Set<string>();
+      for (const item of reviewItems) {
+        if (failedPaths.includes(item.section_path)) {
+          newFailed.add(item.id);
+        }
+      }
+      setFailedIds(newFailed);
+    },
+    [result.yaml_content, reviewItems, onYamlContentChange],
+  );
+
+  // 审核建议操作回调
+  const handleAccept = useCallback(
+    (id: string) => {
+      const newIds = new Set(acceptedIds);
+      newIds.add(id);
+      setAcceptedIds(newIds);
+      recalcMergedYaml(newIds);
+    },
+    [acceptedIds, recalcMergedYaml],
+  );
+
+  const handleIgnore = useCallback(
+    (id: string) => {
+      const newIds = new Set(acceptedIds);
+      newIds.delete(id);
+      setAcceptedIds(newIds);
+      recalcMergedYaml(newIds);
+    },
+    [acceptedIds, recalcMergedYaml],
+  );
+
+  const handleIgnoreAll = useCallback(() => {
+    setAcceptedIds(new Set());
+    recalcMergedYaml(new Set());
+  }, [recalcMergedYaml]);
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* 注入 YAML 高亮样式 */}
@@ -88,7 +220,24 @@ export default function ExtractResultView({
       <SummaryCard summary={result.summary} />
 
       {/* YAML 预览 */}
-      <YamlPreview yamlContent={result.yaml_content} />
+      <YamlPreview yamlContent={displayYaml} />
+
+      <div className="flex items-start gap-3 p-4 bg-sky-50 border border-sky-200 rounded-xl text-sky-700 text-sm">
+        <SvgIcon name="shield-check" size={18} className="mt-0.5 flex-shrink-0" />
+        <span>本页会自动将提取出的 YAML 与必要上下文发送到 AI 服务，生成审核建议；您仍可自行决定是否采纳这些建议。</span>
+      </div>
+
+      {/* 审核建议面板 */}
+      <ExtractReviewPanel
+        reviewItems={reviewItems}
+        loading={reviewLoading}
+        error={reviewError}
+        acceptedIds={acceptedIds}
+        failedIds={failedIds}
+        onAccept={handleAccept}
+        onIgnore={handleIgnore}
+        onIgnoreAll={handleIgnoreAll}
+      />
 
       {/* 插槽：RuleManager 等额外内容 */}
       {children}

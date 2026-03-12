@@ -203,6 +203,16 @@ class RuleExtractor(StyleExtractorMixin, StructureExtractorMixin):
             except Exception as e:
                 print(f"  {Color.YELLOW}⚠{Color.END} {step_name}: {e}")
 
+        # 收集审核上下文信息（供 LLM 审核使用）
+        try:
+            self._colored_text_paragraphs = self.collect_colored_text_paragraphs()
+        except Exception:
+            self._colored_text_paragraphs = []
+        try:
+            self._heading_structure = self.collect_heading_structure()
+        except Exception:
+            self._heading_structure = []
+
         return self.rules
 
     def save_yaml(self, output_path):

@@ -136,8 +136,8 @@ export default function UploadPanel({
     try {
       const customRule = customRules.find((r) => `custom:${r.id}` === selectedRuleId);
       const report = customRule
-        ? await checkFile(selectedFile, "default", sessionId, customRule.yaml_content)
-        : await checkFile(selectedFile, selectedRuleId, sessionId);
+        ? await checkFile(selectedFile, "default", sessionId, customRule.yaml_content, selectedRuleId)
+        : await checkFile(selectedFile, selectedRuleId, sessionId, undefined, selectedRuleId);
       onCheckComplete(report, sessionId);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "检查失败，请重试";
@@ -170,7 +170,7 @@ export default function UploadPanel({
         {/* 隐私安全声明 */}
         <div className="mx-4 sm:mx-6 mb-2 flex items-start gap-2 text-xs text-slate-400">
           <SvgIcon name="shield-check" size={14} className="text-emerald-400 mt-0.5 flex-shrink-0" />
-          <span>文档仅在检查期间临时处理，处理完成后立即从服务器删除，不会被存储或用于任何其他用途。</span>
+          <span>文档及自定义规则内容会在服务器随检查会话临时保留，空闲约一小时后自动清除；检查记录仅缓存在浏览器本地（IndexedDB）。如使用 AI 总结、问答或争议审查，相关片段会发送到 AI 服务。</span>
         </div>
 
         {/* 开始检查按钮 */}

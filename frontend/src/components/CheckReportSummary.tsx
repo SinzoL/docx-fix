@@ -26,9 +26,11 @@ interface CheckReportSummaryProps {
   onFix: (includeTextFix?: boolean) => void;
   fixLoading: boolean;
   sessionId?: string;
-  onRecheck?: (report: CheckReportType) => void;
+  onRecheck?: (report: CheckReportType, nextSelectedRuleId?: string, nextCustomRulesYaml?: string) => void;
   readOnly: boolean;
   onCustomRulesYamlChange?: (yaml: string | undefined) => void;
+  restorableCustomRuleId?: string;
+  restorableCustomRulesYaml?: string;
   /** 是否有文本排版检查项 */
   hasTextConvention: boolean;
   /** 是否全部通过 */
@@ -56,6 +58,8 @@ export default function CheckReportSummary({
   onRecheck,
   readOnly,
   onCustomRulesYamlChange,
+  restorableCustomRuleId,
+  restorableCustomRulesYaml,
   hasTextConvention,
   allPass,
   hasFixable,
@@ -100,29 +104,42 @@ export default function CheckReportSummary({
 
   // 切换规则重新检查
   const handleRuleSwitch = async (ruleId: string) => {
+    const previousRuleId = selectedRuleId;
+    if (recheckLoading) return;
     onSelectedRuleIdChange(ruleId);
-    if (ruleId === report.rule_id || !sessionId || !onRecheck) return;
+    if (ruleId === previousRuleId || !sessionId || !onRecheck) return;
 
     setRecheckLoading(true);
     try {
       const customRule = customRules.find((r) => `custom:${r.id}` === ruleId);
+      const recoveredHistoricalCustomRule =
+        restorableCustomRuleId === ruleId && restorableCustomRulesYaml
+          ? {
+              id: ruleId,
+              name: "历史自定义规则",
+              yaml_content: restorableCustomRulesYaml,
+            }
+          : undefined;
       let newReport: CheckReportType;
       let newCustomYaml: string | undefined;
 
       if (customRule) {
-        newReport = await recheckFile(sessionId, "default", customRule.yaml_content);
+        newReport = await recheckFile(sessionId, "default", customRule.yaml_content, ruleId);
         newCustomYaml = customRule.yaml_content;
+      } else if (recoveredHistoricalCustomRule) {
+        newReport = await recheckFile(sessionId, "default", recoveredHistoricalCustomRule.yaml_content, ruleId);
+        newCustomYaml = recoveredHistoricalCustomRule.yaml_content;
       } else {
-        newReport = await recheckFile(sessionId, ruleId);
+        newReport = await recheckFile(sessionId, ruleId, undefined, ruleId);
         newCustomYaml = undefined;
       }
 
-      onRecheck(newReport);
+      onRecheck(newReport, ruleId, newCustomYaml);
       onCustomRulesYamlChange?.(newCustomYaml);
 
       const displayName = customRule
         ? customRule.name
-        : rules.find(r => r.id === ruleId)?.name || ruleId;
+        : recoveredHistoricalCustomRule?.name || rules.find(r => r.id === ruleId)?.name || ruleId;
       MessagePlugin.success(`已切换为「${displayName}」并重新检查`);
     } catch (err: unknown) {
       const isSessionExpired =
@@ -133,13 +150,17 @@ export default function CheckReportSummary({
       } else {
         MessagePlugin.error("重新检查失败，请重试");
       }
-      onSelectedRuleIdChange(report.rule_id);
+      onSelectedRuleIdChange(previousRuleId);
     } finally {
       setRecheckLoading(false);
     }
   };
 
-  const totalRules = rules.length + customRules.length;
+  const historicalCustomRuleId =
+    restorableCustomRuleId && restorableCustomRulesYaml ? restorableCustomRuleId : undefined;
+  const showHistoricalCustomOption =
+    !!historicalCustomRuleId && !customRules.some((r) => `custom:${r.id}` === historicalCustomRuleId);
+  const totalRules = rules.length + customRules.length + (showHistoricalCustomOption ? 1 : 0);
 
   return (
     <div className="glass-card rounded-2xl p-4 sm:p-6 border-t-4 border-t-blue-500 relative overflow-hidden">
@@ -284,6 +305,18 @@ export default function CheckReportSummary({
                     </div>
                   </Select.Option>
                 ))}
+              </Select.OptionGroup>
+            )}
+            {showHistoricalCustomOption && historicalCustomRuleId && (
+              <Select.OptionGroup label="历史自定义规则">
+                <Select.Option value={historicalCustomRuleId} label="历史自定义规则（本地已删除）" className="rule-select-option">
+                  <div className="flex items-center gap-2 py-0.5">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-md border bg-slate-50 border-slate-200/60 flex items-center justify-center">
+                      <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z" /></svg>
+                    </span>
+                    <span className="font-medium text-slate-700 text-sm">历史自定义规则（本地已删除）</span>
+                  </div>
+                </Select.Option>
               </Select.OptionGroup>
             )}
           </Select>

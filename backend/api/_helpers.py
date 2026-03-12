@@ -244,8 +244,11 @@ async def validate_and_read_upload(file: UploadFile) -> bytes:
 
 
 # ========================================
-# LLM 服务共享基础设施
+# 并发控制共享基础设施
 # ========================================
+
+# 所有上传入口共享的并发信号量（check / extract / polish）
+upload_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
 
 # AI / 润色接口共享的 LLM 并发限制信号量
 llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)

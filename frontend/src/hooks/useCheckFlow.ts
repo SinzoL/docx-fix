@@ -12,7 +12,7 @@
 
 import { useState, useCallback } from "react";
 import { MessagePlugin } from "tdesign-react";
-import type { AppState, CheckReport, FixReport } from "../types";
+import type { AppState, CheckReport, FixReport, HistoryRecord } from "../types";
 import { fixFile, checkCheckSessionStatus } from "../services/api";
 import { saveHistory, updateFixReport } from "../services/cache";
 
@@ -27,8 +27,12 @@ interface UseCheckFlowReturn {
   fixReport: FixReport | null;
   /** 修复中加载状态 */
   fixLoading: boolean;
-  /** 自定义规则 YAML 内容 */
+  /** 当前选中规则对应的自定义 YAML 内容 */
   customRulesYaml: string | undefined;
+  /** 可恢复的历史自定义规则 ID（用于本地规则已删除后仍可切回） */
+  restorableCustomRuleId: string | undefined;
+  /** 可恢复的历史自定义规则 YAML */
+  restorableCustomRulesYaml: string | undefined;
   /** 只读模式（后端 session 过期时启用，禁用修复和切换规则） */
   isReadOnly: boolean;
   /** 后端 session 是否已过期（区分"从未有 session"和"session 已过期"） */
@@ -47,13 +51,13 @@ interface UseCheckFlowReturn {
   /** 下载完成 */
   handleDownloadComplete: () => void;
   /** 规则切换后重新检查 */
-  handleRecheck: (report: CheckReport) => void;
+  handleRecheck: (report: CheckReport, nextSelectedRuleId?: string, nextCustomRulesYaml?: string) => void;
   /** 规则选择变化 */
   handleRuleChange: (ruleId: string) => void;
   /** 自定义规则 YAML 变化 */
   handleCustomRulesYamlChange: (yaml: string | undefined) => void;
   /** 查看历史报告（异步验证 session 后决定只读/可操作） */
-  handleViewHistoryReport: (report: CheckReport) => void;
+  handleViewHistoryReport: (report: CheckReport, record?: HistoryRecord) => void;
   /** 重置所有状态 */
   reset: () => void;
 }
@@ -67,6 +71,8 @@ export function useCheckFlow(
   const [fixReport, setFixReport] = useState<FixReport | null>(null);
   const [fixLoading, setFixLoading] = useState(false);
   const [customRulesYaml, setCustomRulesYaml] = useState<string | undefined>(undefined);
+  const [restorableCustomRuleId, setRestorableCustomRuleId] = useState<string | undefined>(undefined);
+  const [restorableCustomRulesYaml, setRestorableCustomRulesYaml] = useState<string | undefined>(undefined);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -83,18 +89,20 @@ export function useCheckFlow(
       setSessionExpired(false);
       setAppState("REPORT_READY");
 
-      // 缓存检查记录到 IndexedDB
+      // 缓存检查记录到 IndexedDB（含自定义规则 YAML + 规则选择身份）
       saveHistory(
         sid,
         report.filename,
         report.rule_id,
         report.rule_name,
         report,
+        customRulesYaml,
+        selectedRuleId,
       ).catch((err) => {
         console.warn("缓存检查记录失败:", err);
       });
     },
-    [setAppState],
+    [setAppState, customRulesYaml, selectedRuleId],
   );
 
   const handleCheckError = useCallback(() => {
@@ -134,11 +142,30 @@ export function useCheckFlow(
     setAppState("DOWNLOADED");
   }, [setAppState]);
 
-  const handleRecheck = useCallback((report: CheckReport) => {
-    setCheckReport(report);
-    setSelectedRuleId(report.rule_id);
-    setFixReport(null);
-  }, []);
+  const handleRecheck = useCallback(
+    (report: CheckReport, nextSelectedRuleId?: string, nextCustomRulesYaml?: string) => {
+      const effectiveRuleId = nextSelectedRuleId || report.rule_id;
+      setCheckReport(report);
+      setSelectedRuleId(effectiveRuleId);
+      setCustomRulesYaml(nextCustomRulesYaml);
+      setFixReport(null);
+      setIsReadOnly(false);
+      setSessionExpired(false);
+
+      saveHistory(
+        report.session_id,
+        report.filename,
+        report.rule_id,
+        report.rule_name,
+        report,
+        nextCustomRulesYaml,
+        effectiveRuleId,
+      ).catch((err) => {
+        console.warn("更新检查记录失败:", err);
+      });
+    },
+    [],
+  );
 
   const handleRuleChange = useCallback((ruleId: string) => {
     setSelectedRuleId(ruleId);
@@ -156,12 +183,20 @@ export function useCheckFlow(
    * - session 过期 → 只读模式（isReadOnly=true, sessionExpired=true）
    */
   const handleViewHistoryReport = useCallback(
-    (report: CheckReport) => {
+    (report: CheckReport, record?: HistoryRecord) => {
       // 1. 立即展示报告（乐观加载）
       setCheckReport(report);
       setSessionId(report.session_id);
-      setSelectedRuleId(report.rule_id);
-      setCustomRulesYaml(undefined);
+      // 恢复规则身份：优先用历史记录中保存的选择值，而不是 report.rule_id
+      // （自定义规则场景下 report.rule_id 是 "default"，不是用户真实选择的 "custom:xxx"）
+      const restoredRuleId = record?.selected_rule_id || report.rule_id;
+      setSelectedRuleId(restoredRuleId);
+      // 从历史记录中恢复自定义规则 YAML
+      setCustomRulesYaml(record?.custom_rules_yaml);
+      if (restoredRuleId.startsWith("custom:") && record?.custom_rules_yaml) {
+        setRestorableCustomRuleId(restoredRuleId);
+        setRestorableCustomRulesYaml(record.custom_rules_yaml);
+      }
       setFixReport(null);
       setRestoring(true);
       // 先以只读模式展示，避免闪烁
@@ -176,6 +211,34 @@ export function useCheckFlow(
             // session 仍存活 → 解锁可操作模式
             setIsReadOnly(false);
             setSessionExpired(false);
+
+            const restoredYaml = record?.custom_rules_yaml || status.custom_rules_yaml || undefined;
+            const restoredSelectedRuleId = record?.selected_rule_id || status.selected_rule_id || report.rule_id;
+
+            // 后端返回的数据作为备用源（当前端缓存缺失时）
+            if (!record?.custom_rules_yaml && restoredYaml) {
+              setCustomRulesYaml(restoredYaml);
+            }
+            if (!record?.selected_rule_id && restoredSelectedRuleId) {
+              setSelectedRuleId(restoredSelectedRuleId);
+            }
+            if (restoredSelectedRuleId.startsWith("custom:") && restoredYaml) {
+              setRestorableCustomRuleId(restoredSelectedRuleId);
+              setRestorableCustomRulesYaml(restoredYaml);
+            }
+            if ((!record?.custom_rules_yaml && restoredYaml) || (!record?.selected_rule_id && restoredSelectedRuleId !== report.rule_id)) {
+              saveHistory(
+                report.session_id,
+                report.filename,
+                report.rule_id,
+                report.rule_name,
+                report,
+                restoredYaml,
+                restoredSelectedRuleId,
+              ).catch((err) => {
+                console.warn("回写历史记录失败:", err);
+              });
+            }
             MessagePlugin.success("会话仍然有效，可继续修复或切换规则");
           } else {
             // session 已过期 → 保持只读
@@ -197,6 +260,7 @@ export function useCheckFlow(
 
   const reset = useCallback(() => {
     setSessionId("");
+    setSelectedRuleId("default");
     setCheckReport(null);
     setFixReport(null);
     setFixLoading(false);
@@ -213,6 +277,8 @@ export function useCheckFlow(
     fixReport,
     fixLoading,
     customRulesYaml,
+    restorableCustomRuleId,
+    restorableCustomRulesYaml,
     isReadOnly,
     sessionExpired,
     restoring,

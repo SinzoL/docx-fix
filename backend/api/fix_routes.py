@@ -22,20 +22,17 @@ from api._helpers import (
     touch_session,
     read_session_meta,
     resolve_rules,
+    upload_semaphore,
 )
 from services.fixer_service import run_fix
-from config import MAX_CONCURRENT_UPLOADS
 
 logger = logging.getLogger(__name__)
 
 fix_router = APIRouter(tags=["Fix"])
 
-# 并发信号量
-_upload_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
-
 
 # ========================================
-# POST /fix — 执行修复并返回预览
+# POST /fix — 执行格式修复并返回预览
 # ========================================
 @fix_router.post("/fix", response_model=FixReport)
 async def fix_file(request: FixRequest):
@@ -57,8 +54,7 @@ async def fix_file(request: FixRequest):
     touch_session(session_dir)
 
     # 并发限制
-    async with _upload_semaphore:
-
+    async with upload_semaphore:
         # 读取元信息
         meta = read_session_meta(session_dir)
         filename = meta.get("filename", "unknown.docx")

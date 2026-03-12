@@ -132,6 +132,7 @@ class RecheckRequest(BaseModel):
     session_id: str
     rule_id: str
     custom_rules_yaml: Optional[str] = None
+    selected_rule_id: Optional[str] = None
 
 
 class FixRequest(BaseModel):
@@ -276,6 +277,57 @@ class ExtractRulesResponse(BaseModel):
     yaml_content: str  # 格式化的 YAML 规则字符串（前端可直接展示/编辑/保存到 localStorage）
     summary: ExtractRulesSummary  # 提取结果摘要
     filename: str  # 源模板文件名
+    review_context: Optional[ExtractReviewContext] = None  # 审核上下文（供前端传给审核接口）
+
+
+# ========================================
+# 模板提取 LLM 审核相关
+# ========================================
+
+class ColoredTextParagraph(BaseModel):
+    """特殊颜色字体段落信息"""
+    index: int                     # 段落在文档中的索引
+    text: str                      # 特殊颜色字体段落的文本内容
+    color: str                     # 颜色值（如 "FF0000"、"0000FF"）
+    prev_text: str = ""            # 前一段落文本（上下文）
+    next_text: str = ""            # 后一段落文本（上下文）
+
+
+class HeadingStructureItem(BaseModel):
+    """文档标题结构摘要"""
+    index: int                     # 段落在文档中的索引
+    text: str                      # 标题文字
+    style_name: str                # 所用样式名（如 "Heading 1"）
+    outline_level: int             # 大纲级别（0=一级，1=二级...）
+
+
+class ExtractReviewContext(BaseModel):
+    """提取响应中的审核上下文"""
+    colored_text_paragraphs: list[ColoredTextParagraph] = []
+    heading_structure: list[HeadingStructureItem] = []
+
+
+class ExtractReviewItem(BaseModel):
+    """LLM 审核发现的单条建议（后端组装，ID 由后端生成）"""
+    id: str                        # 后端生成，如 "rev-001"
+    category: str                  # "heading_error" | "hidden_rule" | "contradiction" | "quality"
+    severity: str                  # "error" | "warning" | "info"
+    description: str               # LLM 的分析描述
+    section_path: str              # 影响的 YAML 节路径（如 "styles.Normal.paragraph"）
+    yaml_snippet: str = ""         # 可直接融入 section_path 对应位置的 YAML 片段
+    source_text: str = ""          # 原始段落文本（仅 hidden_rule 类别）
+
+
+class ExtractReviewRequest(BaseModel):
+    """POST /api/extract-rules/review 请求体"""
+    yaml_content: str
+    colored_text_paragraphs: list[ColoredTextParagraph] = []
+    heading_structure: list[HeadingStructureItem] = []
+
+
+class ExtractReviewResponse(BaseModel):
+    """POST /api/extract-rules/review 响应"""
+    review_items: list[ExtractReviewItem]
 
 
 # ========================================
@@ -355,3 +407,16 @@ class CheckSessionStatusSchema(BaseModel):
     exists: bool
     filename: str = ""
     rule_id: str = ""
+    custom_rules_yaml: Optional[str] = None
+    selected_rule_id: Optional[str] = None
+
+
+# ========================================
+# 强制 Pydantic 在模块完全加载后 rebuild model
+# 解决 `from __future__ import annotations` + Python 3.9 下
+# forward ref 解析找不到 Optional 的问题
+# ========================================
+ExtractReviewContext.model_rebuild()
+ExtractRulesResponse.model_rebuild()
+ExtractReviewRequest.model_rebuild()
+ExtractReviewResponse.model_rebuild()

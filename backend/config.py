@@ -54,6 +54,7 @@ DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.co
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 LLM_DEFAULT_MAX_TOKENS = 2048
 LLM_DEFAULT_TEMPERATURE = 0.3  # 偏低温度，输出更稳定
+LLM_REVIEW_MAX_TOKENS = 4096   # 模板提取审核允许更大的输出 token
 
 
 # ========================================

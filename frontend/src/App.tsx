@@ -225,7 +225,7 @@ function App() {
                 onGoToExtract={() => setActiveTab("extract")}
               />
               <div className="mt-8">
-                <HistoryList onViewReport={check.handleViewHistoryReport} />
+                <HistoryList onViewReport={(report, record) => check.handleViewHistoryReport(report, record)} />
               </div>
             </div>
 
@@ -275,11 +275,15 @@ function App() {
               onFix={check.handleFix}
               fixLoading={check.fixLoading}
               sessionId={check.sessionId}
+              selectedRuleId={check.selectedRuleId}
+              onSelectedRuleIdChange={check.handleRuleChange}
               onRecheck={check.handleRecheck}
               readOnly={check.isReadOnly}
               sessionExpired={check.sessionExpired}
               restoring={check.restoring}
               customRulesYaml={check.customRulesYaml}
+              restorableCustomRuleId={check.restorableCustomRuleId}
+              restorableCustomRulesYaml={check.restorableCustomRulesYaml}
               onCustomRulesYamlChange={check.handleCustomRulesYamlChange}
             />
           </div>
@@ -337,6 +341,7 @@ function App() {
               onSave={extract.handleSave}
               saveDialogVisible={extract.saveDialogVisible}
               onSaveDialogVisibleChange={extract.setSaveDialogVisible}
+              onYamlContentChange={extract.handleMergedYamlChange}
             >
               <RuleManager key={`result-${extract.ruleManagerKey}`} />
             </ExtractResultView>
@@ -418,7 +423,7 @@ function App() {
             <div className="text-sm text-slate-500 leading-relaxed">
               <span className="font-semibold text-slate-600">隐私保护承诺</span>
               <span className="mx-1.5 text-slate-300">|</span>
-              上传的文档和模板文件仅在处理期间临时使用，完成后立即从服务器删除；自定义规则仅存储在浏览器本地，不会上传至服务器。不会收集、存储或分享任何文件内容。
+              上传的文档、模板文件及自定义规则内容会在服务器随会话临时保留，空闲约一小时后自动清除；检查记录、提取结果和润色结果仅缓存在浏览器本地（IndexedDB）。如使用 AI 总结、问答、规则生成、争议审查或内容润色，相关内容会发送到服务器并转交 AI 服务处理。
             </div>
           </div>
 

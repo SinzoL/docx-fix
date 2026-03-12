@@ -78,7 +78,7 @@ describe("fetchRuleDetail", () => {
 });
 
 describe("checkFile", () => {
-  it("应发送 FormData 包含 file、rule_id 和 session_id", async () => {
+  it("应发送 FormData 包含 file、rule_id、session_id 和可选 selected_rule_id", async () => {
     const mockReport = {
       session_id: "s1",
       filename: "test.docx",
@@ -97,7 +97,7 @@ describe("checkFile", () => {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
 
-    const result = await checkFile(file, "default", "session-123");
+    const result = await checkFile(file, "default", "session-123", undefined, "custom:abc");
     expect(result.session_id).toBe("s1");
 
     // 验证 fetch 调用参数
@@ -105,6 +105,10 @@ describe("checkFile", () => {
     expect(url).toBe("/api/check");
     expect(options.method).toBe("POST");
     expect(options.body).toBeInstanceOf(FormData);
+    const body = options.body as FormData;
+    expect(body.get("rule_id")).toBe("default");
+    expect(body.get("session_id")).toBe("session-123");
+    expect(body.get("selected_rule_id")).toBe("custom:abc");
   });
 });
 

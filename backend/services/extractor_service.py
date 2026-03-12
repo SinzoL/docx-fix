@@ -48,10 +48,17 @@ def run_extract(
     # 生成摘要信息
     summary = _build_summary(rules)
 
+    # 收集审核上下文（供 LLM 审核使用）
+    review_context = {
+        "colored_text_paragraphs": getattr(extractor, "_colored_text_paragraphs", []),
+        "heading_structure": getattr(extractor, "_heading_structure", []),
+    }
+
     return {
         "rules": rules,
         "yaml_content": yaml_content,
         "summary": summary,
+        "review_context": review_context,
     }
 
 

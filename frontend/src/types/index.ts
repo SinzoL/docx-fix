@@ -183,6 +183,10 @@ export interface HistoryRecord {
   fix_report?: FixReport;
   created_at: number;
   expires_at: number;
+  /** 自定义规则 YAML（用于恢复时重新发送给后端） */
+  custom_rules_yaml?: string;
+  /** 前端下拉框选择值（如 "custom:abc-123"），用于恢复规则身份 */
+  selected_rule_id?: string;
 }
 
 // ========================================
@@ -253,6 +257,50 @@ export interface ExtractResult {
   yaml_content: string;
   summary: ExtractSummary;
   filename: string;
+  review_context?: ExtractReviewContext;  // 审核上下文（供前端传给审核接口）
+}
+
+// ========================================
+// 模板提取 LLM 审核相关
+// ========================================
+
+/** 特殊颜色字体段落信息 */
+export interface ColoredTextParagraph {
+  index: number;
+  text: string;
+  color: string;        // 颜色值（如 "FF0000"）
+  prev_text: string;
+  next_text: string;
+}
+
+/** 文档标题结构摘要 */
+export interface HeadingStructureItem {
+  index: number;
+  text: string;
+  style_name: string;
+  outline_level: number;
+}
+
+/** 提取审核上下文 */
+export interface ExtractReviewContext {
+  colored_text_paragraphs: ColoredTextParagraph[];
+  heading_structure: HeadingStructureItem[];
+}
+
+/** LLM 审核发现的单条建议 */
+export interface ExtractReviewItem {
+  id: string;
+  category: "heading_error" | "hidden_rule" | "contradiction" | "quality";
+  severity: "error" | "warning" | "info";
+  description: string;
+  section_path: string;
+  yaml_snippet: string;
+  source_text: string;
+}
+
+/** POST /api/extract-rules/review 响应 */
+export interface ExtractReviewResponse {
+  review_items: ExtractReviewItem[];
 }
 
 // ========================================
@@ -356,6 +404,9 @@ export interface CheckSessionStatus {
   exists: boolean;
   filename: string;
   rule_id: string;
+  custom_rules_yaml?: string | null;
+  /** 前端下拉框选择值，用于恢复规则身份 */
+  selected_rule_id?: string | null;
 }
 
 // ========================================

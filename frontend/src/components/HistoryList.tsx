@@ -20,7 +20,7 @@ import type { HistoryRecord, CheckReport } from "../types";
 import { SvgIcon } from "./icons/SvgIcon";
 
 interface HistoryListProps {
-  onViewReport?: (report: CheckReport) => void;
+  onViewReport?: (report: CheckReport, record: HistoryRecord) => void;
 }
 
 export default function HistoryList({ onViewReport }: HistoryListProps) {
@@ -121,7 +121,7 @@ export default function HistoryList({ onViewReport }: HistoryListProps) {
             <div
               key={record.id}
               className="glass-card rounded-xl p-5 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer group border-white/60 relative overflow-hidden"
-              onClick={() => onViewReport?.(record.check_report)}
+              onClick={() => onViewReport?.(record.check_report, record)}
             >
               <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-bl-full pointer-events-none transition-opacity opacity-0 group-hover:opacity-100"></div>
               

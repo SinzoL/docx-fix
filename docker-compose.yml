@@ -4,8 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     container_name: docxfix-backend
-    ports:
-      - "8000:8000"
     env_file:
       - ./backend/.env
     environment:
@@ -40,8 +38,6 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     container_name: docxfix-frontend
-    ports:
-      - "5173:80"
     depends_on:
       - backend
     restart: unless-stopped

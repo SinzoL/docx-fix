@@ -86,7 +86,9 @@ export async function saveHistory(
   filename: string,
   ruleId: string,
   ruleName: string,
-  checkReport: CheckReport
+  checkReport: CheckReport,
+  customRulesYaml?: string,
+  selectedRuleId?: string,
 ): Promise<void> {
   try {
     const db = await getDB();
@@ -100,6 +102,12 @@ export async function saveHistory(
       created_at: now,
       expires_at: now + EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     };
+    if (customRulesYaml) {
+      record.custom_rules_yaml = customRulesYaml;
+    }
+    if (selectedRuleId) {
+      record.selected_rule_id = selectedRuleId;
+    }
     await db.put(STORE_NAME, record);
   } catch (error) {
     console.warn("保存缓存失败:", error);

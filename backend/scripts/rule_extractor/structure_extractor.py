@@ -471,3 +471,39 @@ class StructureExtractorMixin:
             fix['manual_numbering_patterns'] = manual_patterns
 
         self.rules['heading_style_fix'] = fix
+
+    # ========================================
+    # 审核上下文：标题结构摘要收集
+    # ========================================
+    def collect_heading_structure(self) -> list[dict]:
+        """遍历文档段落，收集标题结构摘要信息。
+
+        对带有 Heading 样式或 outline_level 的段落，收集其信息。
+
+        Returns:
+            标题结构摘要列表，每项包含:
+            - index: 段落索引
+            - text: 标题文字
+            - style_name: 所用样式名（如 "Heading 1"）
+            - outline_level: 大纲级别（0=一级，1=二级...）
+        """
+        result = []
+
+        for i, para in enumerate(self.doc.paragraphs):
+            text = para.text.strip()
+            if not text:
+                continue
+
+            outline_level = self._get_para_outline_level(para)
+
+            # outline_level < 9 表示是标题段落
+            if outline_level < 9:
+                style_name = para.style.name if para.style else "Normal"
+                result.append({
+                    "index": i,
+                    "text": text,
+                    "style_name": style_name,
+                    "outline_level": outline_level,
+                })
+
+        return result

@@ -70,6 +70,8 @@ interface UseExtractFlowReturn {
   handleSave: () => void;
   /** 下载 YAML */
   handleDownload: () => void;
+  /** 更新合并后的 YAML 内容（由审核面板回调） */
+  handleMergedYamlChange: (yaml: string) => void;
   /** 刷新 RuleManager（保存后触发） */
   refreshRuleManager: () => void;
   /** 重置所有状态 */
@@ -93,6 +95,8 @@ export function useExtractFlow(
   const [saveDialogVisible, setSaveDialogVisible] = useState(false);
   const [ruleManagerKey, setRuleManagerKey] = useState(0);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  // 审核建议合并后的 YAML 内容（保存/下载时使用此值）
+  const [mergedYamlContent, setMergedYamlContent] = useState<string | null>(null);
 
   // ---------- 事件处理 ----------
 
@@ -191,10 +195,12 @@ export function useExtractFlow(
     }
 
     try {
+      // 使用合并后的 YAML（如果有审核建议被接受的话）
+      const yamlToSave = mergedYamlContent || extractResult.yaml_content;
       saveRule({
         name: ruleName.trim(),
         source: extractMode === "upload" ? "template-extract" : "llm-generate",
-        yaml_content: extractResult.yaml_content,
+        yaml_content: yamlToSave,
         source_filename: extractResult.filename,
       });
       MessagePlugin.success("规则已保存到浏览器本地");
@@ -204,13 +210,20 @@ export function useExtractFlow(
     } catch {
       MessagePlugin.error("保存失败，可能存储空间不足");
     }
-  }, [extractResult, ruleName, extractMode]);
+  }, [extractResult, ruleName, extractMode, mergedYamlContent]);
+
+  /** 更新合并后的 YAML 内容（由审核面板回调） */
+  const handleMergedYamlChange = useCallback((yaml: string) => {
+    setMergedYamlContent(yaml);
+  }, []);
 
   /** 下载 YAML 文件 */
   const handleDownload = useCallback(() => {
     if (!extractResult) return;
 
-    const blob = new Blob([extractResult.yaml_content], {
+    // 使用合并后的 YAML（如果有审核建议被接受的话）
+    const yamlToDownload = mergedYamlContent || extractResult.yaml_content;
+    const blob = new Blob([yamlToDownload], {
       type: "text/yaml;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
@@ -221,7 +234,7 @@ export function useExtractFlow(
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [extractResult, ruleName]);
+  }, [extractResult, ruleName, mergedYamlContent]);
 
   /** 刷新 RuleManager */
   const refreshRuleManager = useCallback(() => {
@@ -237,6 +250,7 @@ export function useExtractFlow(
     setExtractMode("upload");
     setRuleName("");
     setSaveDialogVisible(false);
+    setMergedYamlContent(null);
     // 注意：不重置 ruleManagerKey 和 historyRefreshKey（它们是递增的刷新 key）
   }, []);
 
@@ -263,6 +277,7 @@ export function useExtractFlow(
     setSaveDialogVisible,
     handleSave,
     handleDownload,
+    handleMergedYamlChange,
     refreshRuleManager,
     reset,
   };

@@ -10,7 +10,6 @@
 import os
 import uuid
 import logging
-import asyncio
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -27,9 +26,9 @@ from api._helpers import (
     safe_filename,
     validate_and_read_upload,
     check_llm_available,
+    upload_semaphore,
     llm_semaphore,
 )
-from services import llm_service
 from services import polisher_service
 
 logger = logging.getLogger(__name__)
@@ -51,24 +50,36 @@ async def polish_file(
     """
     check_llm_available()
 
-    # 验证文件（扩展名、大小、魔数）
-    content = await validate_and_read_upload(file)
+    # 轻量级扩展名预检（不读取文件内容，不占内存）
+    if not file.filename or not file.filename.lower().endswith(".docx"):
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="INVALID_FILE_TYPE",
+                message="仅支持 .docx 格式文件"
+            ).model_dump(),
+        )
 
-    # 保存到临时文件（安全路径）
-    session_id = str(uuid.uuid4())
-    session_dir = safe_session_dir(session_id)
-    os.makedirs(session_dir, exist_ok=True)
-
-    # 安全文件名
-    safe_name = safe_filename(file.filename)
-    filepath = os.path.join(session_dir, safe_name)
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    logger.info(f"[{session_id}] 开始润色：{safe_name}")
-
-    # 限制并发：SSE generator 包裹在信号量内
+    # SSE generator：先用共享 upload_semaphore 限制文件读取与落盘，
+    # 再用 llm_semaphore 限制 LLM 润色并发，避免多入口各自放大并发。
     async def _rate_limited_generator():
+        async with upload_semaphore:
+            # 在共享上传信号量内读取文件，防止并发大文件占满内存
+            content = await validate_and_read_upload(file)
+
+            # 保存到临时文件
+            session_id = str(uuid.uuid4())
+            session_dir = safe_session_dir(session_id)
+            os.makedirs(session_dir, exist_ok=True)
+            safe_name = safe_filename(file.filename)
+            filepath = os.path.join(session_dir, safe_name)
+            with open(filepath, "wb") as f:
+                f.write(content)
+            # 释放内存引用
+            del content
+
+        logger.info(f"[{session_id}] 开始润色：{safe_name}")
+
         async with llm_semaphore:
             async for chunk in polisher_service.polish_file(
                 file_path=filepath,

@@ -12,7 +12,6 @@ import os
 import logging
 import time
 import threading
-import uuid
 from dataclasses import asdict
 from typing import AsyncGenerator
 
@@ -42,10 +41,20 @@ _SESSION_PERSIST_FILE = "_polish_session.json"
 
 
 def _touch_polish_session(session_id: str) -> None:
-    """更新润色 session 的最后访问时间"""
+    """更新润色 session 的最后访问时间，同时续命磁盘目录。
+
+    必须同步更新磁盘目录的 mtime，否则 app.py 后台清理任务
+    会按 mtime 删除目录，导致内存 session 还在但文件已被清除。
+    """
     session = _sessions.get(session_id)
     if session:
         session["_last_access"] = time.time()
+        # 同步续命磁盘目录，避免与 app.py 清理时钟不一致
+        sd = _session_dir(session_id)
+        try:
+            os.utime(sd, None)
+        except OSError:
+            pass
 
 
 def cleanup_expired_polish_sessions() -> int:
@@ -220,11 +229,22 @@ def _get_session(session_id: str) -> dict | None:
 def check_session_exists(session_id: str) -> dict:
     """检查 session 是否存在且可用。
 
+    除了检查内存/磁盘 session 元数据是否存在，还会验证
+    底层文件是否真正存在（防止磁盘已被清理但内存未同步）。
+
     Returns:
         {"exists": True/False, "applied": bool, "filename": str}
     """
     session = _get_session(session_id)
     if session is None:
+        return {"exists": False, "applied": False, "filename": ""}
+
+    # 验证底层文件是否仍然存在（防止磁盘已被清理）
+    file_path = session.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        # 磁盘文件已丢失，清理内存中的无效 session
+        with _sessions_lock:
+            _sessions.pop(session_id, None)
         return {"exists": False, "applied": False, "filename": ""}
 
     _touch_polish_session(session_id)

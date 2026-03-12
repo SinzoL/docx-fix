@@ -3,6 +3,7 @@
 
 提供从模板文档提取格式规则的端点：
 - POST /extract-rules — 上传模板文档并提取格式规则
+- POST /extract-rules/review — LLM 智能审核提取结果
 """
 
 from __future__ import annotations
@@ -19,22 +20,26 @@ from api.schemas import (
     ExtractRulesResponse,
     ExtractRulesSummary,
     ExtractRulesPageSetup,
+    ExtractReviewContext,
+    ColoredTextParagraph,
+    HeadingStructureItem,
+    ExtractReviewRequest,
+    ExtractReviewResponse,
+    ExtractReviewItem,
     ErrorResponse,
 )
 from api._helpers import (
     safe_session_dir,
     safe_filename,
     validate_and_read_upload,
+    upload_semaphore,
 )
 from services.extractor_service import run_extract
-from config import MAX_CONCURRENT_UPLOADS
+from services.extract_review_service import review_extract_rules
 
 logger = logging.getLogger(__name__)
 
 extract_router = APIRouter(tags=["Extract"])
-
-# 并发信号量
-_upload_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
 
 
 # ========================================
@@ -46,11 +51,11 @@ async def extract_rules(
     name: str = Form(default=""),
 ):
     """上传 .docx 模板文件，自动提取格式规则并返回 YAML 内容。"""
-    # 1. 验证文件（使用公共函数）
-    content = await validate_and_read_upload(file)
+    # 并发限制（前移到文件读取之前，避免多个大文件同时读入内存）
+    async with upload_semaphore:
 
-    # 并发限制
-    async with _upload_semaphore:
+        # 1. 验证文件（使用公共函数）
+        content = await validate_and_read_upload(file)
 
         # 2. 保存文件到临时目录
         session_id = str(uuid.uuid4())
@@ -109,10 +114,24 @@ async def extract_rules(
                 extracted_at=raw_summary.get("extracted_at", ""),
             )
 
+            # 构建审核上下文
+            raw_review_ctx = result.get("review_context", {})
+            review_context = ExtractReviewContext(
+                colored_text_paragraphs=[
+                    ColoredTextParagraph(**p)
+                    for p in raw_review_ctx.get("colored_text_paragraphs", [])
+                ],
+                heading_structure=[
+                    HeadingStructureItem(**h)
+                    for h in raw_review_ctx.get("heading_structure", [])
+                ],
+            )
+
             return ExtractRulesResponse(
                 yaml_content=result["yaml_content"],
                 summary=summary,
                 filename=safe_name,
+                review_context=review_context,
             )
         except HTTPException:
             raise
@@ -128,3 +147,42 @@ async def extract_rules(
         finally:
             # 清理临时文件
             shutil.rmtree(session_dir, ignore_errors=True)
+
+
+# ========================================
+# POST /extract-rules/review — LLM 智能审核提取结果
+# ========================================
+@extract_router.post("/extract-rules/review", response_model=ExtractReviewResponse)
+async def review_extract(
+    request: ExtractReviewRequest,
+):
+    """对提取的规则进行 LLM 智能审核。
+
+    接受提取结果上下文（YAML 内容 + 特殊颜色字体 + 标题结构），
+    调用 LLM 进行四维度审核，返回审核建议列表。
+    LLM 不可用时返回空列表（不返回错误）。
+    """
+    # 校验 yaml_content 非空
+    if not request.yaml_content or not request.yaml_content.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="INVALID_REQUEST",
+                message="缺少必要的审核上下文",
+            ).model_dump(),
+        )
+
+    # 调用审核服务
+    review_items = await review_extract_rules(
+        yaml_content=request.yaml_content,
+        colored_text_paragraphs=[
+            p.model_dump() for p in request.colored_text_paragraphs
+        ],
+        heading_structure=[
+            h.model_dump() for h in request.heading_structure
+        ],
+    )
+
+    return ExtractReviewResponse(
+        review_items=[ExtractReviewItem(**item) for item in review_items],
+    )

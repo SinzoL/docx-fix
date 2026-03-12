@@ -325,3 +325,87 @@ class StyleExtractorMixin:
             return f'自定义样式 "{name}"'
 
         return None
+
+    # ========================================
+    # 审核上下文：特殊颜色字体段落收集
+    # ========================================
+    def collect_colored_text_paragraphs(self) -> list[dict]:
+        """遍历文档段落，收集包含特殊颜色字体的段落信息。
+
+        检测 run 级别和样式级别的颜色，收集非黑色(000000)/非 auto 的段落。
+
+        Returns:
+            特殊颜色字体段落列表，每项包含:
+            - index: 段落索引
+            - text: 段落文本
+            - color: 颜色值（如 "FF0000"）
+            - prev_text: 前一段落文本
+            - next_text: 后一段落文本
+        """
+        result = []
+        paragraphs = self.doc.paragraphs
+
+        for i, para in enumerate(paragraphs):
+            text = para.text.strip()
+            if not text:
+                continue
+
+            # 检测该段落是否包含特殊颜色
+            color = self._detect_paragraph_color(para)
+            if not color:
+                continue
+
+            # 收集上下文
+            prev_text = ""
+            next_text = ""
+            if i > 0:
+                prev_text = paragraphs[i - 1].text.strip()
+            if i < len(paragraphs) - 1:
+                next_text = paragraphs[i + 1].text.strip()
+
+            result.append({
+                "index": i,
+                "text": text,
+                "color": color,
+                "prev_text": prev_text,
+                "next_text": next_text,
+            })
+
+        return result
+
+    def _detect_paragraph_color(self, para) -> "str | None":
+        """检测段落中是否存在特殊颜色字体。
+
+        优先检测 run 级别（直接格式化）的颜色，
+        其次检测样式级别的颜色。
+
+        Args:
+            para: python-docx Paragraph 对象
+
+        Returns:
+            检测到的颜色值（如 "FF0000"），未检测到返回 None
+        """
+        _SKIP_COLORS = {'000000', 'AUTO'}
+
+        # 1. 检测 run 级别颜色（直接格式化，优先级更高）
+        for run in para.runs:
+            # run 级别：检查 run 元素的 rPr
+            rPr = run._element.find('w:rPr', NSMAP)
+            if rPr is not None:
+                color_el = rPr.find('w:color', NSMAP)
+                if color_el is not None:
+                    val = (color_el.get(f'{{{W}}}val') or '').upper()
+                    if val and val not in _SKIP_COLORS:
+                        return val
+
+        # 2. 检测样式级别颜色
+        if para.style and para.style.element is not None:
+            style_rPr = para.style.element.find('.//w:rPr', NSMAP)
+            if style_rPr is not None:
+                color_el = style_rPr.find('w:color', NSMAP)
+                if color_el is not None:
+                    val = (color_el.get(f'{{{W}}}val') or '').upper()
+                    if val and val not in _SKIP_COLORS:
+                        return val
+
+        return None
