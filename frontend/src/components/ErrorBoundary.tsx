@@ -8,6 +8,7 @@
 
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { SvgIcon } from "./icons/SvgIcon";
 
 interface Props {
   children: ReactNode;
@@ -42,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
           <div className="glass-card rounded-2xl p-8 sm:p-12 text-center max-w-lg w-full">
             <div className="w-20 h-20 bg-red-100 rounded-full mx-auto flex items-center justify-center mb-6">
-              <span className="text-4xl">⚠️</span>
+              <SvgIcon name="alert-triangle" size={40} className="text-red-500" />
             </div>
             <h3 className="text-2xl font-bold text-slate-800 mb-3 font-display">
               页面出错了

@@ -141,12 +141,12 @@ export default function GenericHistoryList<T extends { id: string }>({
 
   if (records.length === 0) {
     return (
-      <div className="glass-card rounded-2xl p-8 text-center border-dashed border-2 border-slate-300">
-        <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-          <SvgIcon name={emptyIcon} size={24} className="opacity-40" />
+      <div className="glass-card rounded-2xl p-8 sm:p-10 text-center border-dashed border-2 border-slate-200 hover:border-slate-300 transition-colors">
+        <div className="w-16 h-16 bg-gradient-to-br from-slate-100 to-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+          <SvgIcon name={emptyIcon} size={28} className="text-slate-400" />
         </div>
-        <p className="text-base font-bold text-slate-700 font-display mb-1">{emptyTitle}</p>
-        <p className="text-sm text-slate-500">{emptyDescription}</p>
+        <p className="text-lg font-bold text-slate-700 font-display mb-2">{emptyTitle}</p>
+        <p className="text-sm text-slate-500 max-w-xs mx-auto">{emptyDescription}</p>
       </div>
     );
   }

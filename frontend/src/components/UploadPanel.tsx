@@ -7,7 +7,7 @@
  * - 触发上传检查
  */
 
-import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { MessagePlugin } from "tdesign-react";
 import type { UploadFile } from "tdesign-react";
 import { fetchRules, checkFile } from "../services/api";
@@ -45,7 +45,6 @@ export default function UploadPanel({
   const [rulesLoading, setRulesLoading] = useState(true);
   const [rulesError, setRulesError] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
   // ---- 规则加载（可重试，卸载时取消飞行中的请求） ----
   const mountedRef = useRef(true);
@@ -169,20 +168,10 @@ export default function UploadPanel({
         {/* 步骤2: 上传目标文档 */}
         <FileDropzone selectedFile={selectedFile} onFileChange={handleFileChange} />
 
-        {/* 隐私安全声明（可折叠） */}
-        <div className="mx-4 sm:mx-6 mb-2 flex items-start gap-2 text-xs text-slate-400">
-          <SvgIcon name="shield-check" size={14} className="text-emerald-400 mt-0.5 flex-shrink-0" />
-          <span>
-            您的文档数据受到安全保护。
-            {privacyExpanded ? (
-              <Fragment>
-                <span className="text-slate-500"> 文档及自定义规则内容会在服务器随检查会话临时保留，空闲约一小时后自动清除；检查记录仅缓存在浏览器本地（IndexedDB）。如使用 AI 总结、问答或争议审查，相关片段会发送到 AI 服务。</span>
-                <button onClick={() => setPrivacyExpanded(false)} className="text-blue-500 hover:text-blue-600 ml-1 cursor-pointer hover:underline">收起</button>
-              </Fragment>
-            ) : (
-              <button onClick={() => setPrivacyExpanded(true)} className="text-blue-500 hover:text-blue-600 ml-1 cursor-pointer hover:underline">查看详情</button>
-            )}
-          </span>
+        {/* 隐私安全提示 */}
+        <div className="mx-4 sm:mx-6 mb-2 flex items-center gap-2 text-xs text-slate-400">
+          <SvgIcon name="shield-check" size={14} className="text-emerald-400 flex-shrink-0" />
+          <span>您的文档数据受到安全保护，详情见页脚</span>
         </div>
 
         {/* 开始检查按钮 */}
@@ -196,7 +185,7 @@ export default function UploadPanel({
                 : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 hover:shadow-blue-500/30 hover:-translate-y-0.5 cursor-pointer'
             }`}
           >
-            {loading ? '正在处理...' : '开始深度检查'}
+            {loading ? '处理中...' : '开始检查'}
           </button>
         </div>
       </div>

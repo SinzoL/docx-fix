@@ -182,7 +182,7 @@ function App() {
               <div className="inline-flex bg-white/60 backdrop-blur-sm rounded-xl p-1 border border-slate-200/60 shadow-sm">
                 <button
                   onClick={() => setActiveTab("check")}
-                  className={`px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
                     activeTab === "check"
                       ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25 font-bold"
                       : "text-slate-500 hover:text-slate-700 font-semibold"
@@ -192,9 +192,9 @@ function App() {
                 </button>
                 <button
                   onClick={() => setActiveTab("extract")}
-                  className={`px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
                     activeTab === "extract"
-                      ? "bg-white text-purple-600 shadow-sm font-bold border-b-2 border-purple-600"
+                      ? "bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-violet-500/25 font-bold"
                       : "text-slate-500 hover:text-slate-700 font-semibold"
                   }`}
                 >
@@ -202,9 +202,9 @@ function App() {
                 </button>
                 <button
                   onClick={() => setActiveTab("polish")}
-                  className={`px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-6 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer ${
                     activeTab === "polish"
-                      ? "bg-white text-violet-600 shadow-sm font-bold border-b-2 border-violet-600"
+                      ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md shadow-pink-500/25 font-bold"
                       : "text-slate-500 hover:text-slate-700 font-semibold"
                   }`}
                 >
@@ -455,7 +455,7 @@ function App() {
                 className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors"
               >
                 <SvgIcon name="mail" size={16} />
-                <span>3013749951@qq.com</span>
+                <span>联系作者</span>
               </a>
             </div>
           </div>
