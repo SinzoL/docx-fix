@@ -58,3 +58,6 @@ tests/browser_ai/.env
 tests/browser_ai/reports/
 tests/browser_ai/fixtures/*.docx
 docx-tmp/
+AI-CSHR/
+skills/
+prprprpr/

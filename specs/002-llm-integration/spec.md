@@ -48,7 +48,7 @@ LLM 的接入**不是替代**现有确定性引擎，而是作为**上层增强*
 ### 环境变量（后端 .env）
 
 ```env
-DEEPSEEK_API_KEY=sk-879761b4e65347c9aa8cd1ecd4cef368
+DEEPSEEK_API_KEY=sk-your-api-key-here
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 DEEPSEEK_MODEL=deepseek-chat
 ```
